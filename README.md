@@ -1,4 +1,4 @@
-# bagtool: Usefull ROS Bag Management for Dataset Collection
+# bagtool: Useful ROS Bag Management for Dataset Collection
 
 --- 
 
@@ -42,7 +42,7 @@ $ pip install -e .
 
 ### Main Tool - Process
 
-The main tool of this package is the process tool, which process ROS bag files from a given folder path and saving the data in usefull formats and structures for future works.
+The main tool of this package is the process tool, which process ROS bag files from a given folder path and saving the data in useful formats and structures for future works.
 
 #### You can use the tool in two ways:
 
