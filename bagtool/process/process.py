@@ -17,7 +17,8 @@ import json
 import sys
 import os
 import yaml
-import rosbag
+
+# Third party libraries
 from cv_bridge import CvBridge
 import h5py
 import matplotlib.pyplot as plt
@@ -25,21 +26,66 @@ import moviepy.video.io.VideoFileClip as mp
 from tqdm import tqdm
 from matplotlib import animation
 
+# ROS libraries
+import rosbag
+
+# Custom libraries
 from bagtool.process.utils import *
-# from utils import *
-# from .utils import *
+
 
 class BadReader:
+    """
+    A class to read and process data from a ROS bag file.
 
+    Attributes:
+        bagfile (str): Path to the ROS bag file.
+        cv_bridge (CvBridge): A CvBridge object for image conversion.
+        filename (str): Name of the bag file.
+        dir (str): Directory of the bag file.
+        dst_datafolder (str): Destination folder for processed data.
+        metadata (dict): Metadata information of the bag file.
+        topic_tuple (tuple): Tuple containing information about topics in the bag file.
+        topics (list): List of topics in the bag file.
+        topics_to_keys (dict): Mapping of topics to their respective keys.
+        message_types (list): List of message types in the topics.
+        n_messages (list): List of message counts for each topic.
+        frequency (list): List of frequencies for each topic.
+        raw_data (dict): Raw data extracted from the bag file.
+        aligned_data (dict): Aligned data based on synchronization rate.
+        sync_rate (float): Synchronization rate for data alignment.
+    
+    Methods:
+        __init__: Initializes the BadReader instance.
+        _init_raw_data: Initializes the raw data structure.
+        _init_aligned_data: Initializes the aligned data structure.
+        _get_sync_rate: Calculates the synchronization rate.
+        _process_data: Processes the data from the bag file.
+        get_raw_element: Retrieves raw data elements.
+        get_aligned_element: Retrieves aligned data elements.
+        get_raw_dataset: Returns the raw data dataset.
+        get_aligned_dataset: Returns the aligned data dataset.
+        save_raw: Saves raw data to a file.
+        save_aligned: Saves aligned data to files.
+        save_traj_video: Generates and saves a trajectory video.
+    """
     def __init__(self, bagfile, dst_dataset = None, dst_datafolder_name=None) -> None:
+        """
+        Initialize the BadReader object with a ROS bag file and optional destination dataset and folder names.
+
+        This method sets up the necessary attributes for reading and processing the bag file, including extracting metadata,
+        topics information, and initializing data structures for raw and aligned data.
+
+        Args:
+            bagfile (str): Path to the ROS bag file to be read.
+            dst_dataset (str, optional): Destination dataset path. Default is None.
+            dst_datafolder_name (str, optional): Name of the folder to store processed data. Default is None.
+        """
         
-        print(f"[INFO]  Reading {bagfile}.")
+        print(f"\n[INFO]  Reading {bagfile}.")
 
         self.bagfile = bagfile
         self.cv_bridge = CvBridge()
-        
 
-        
         parts = bagfile.split('/')
         
         # If the bag_file contains '/', parts will have more than one element
@@ -93,13 +139,13 @@ class BadReader:
         for t1 in self.topic_tuple: self.frequency.append(t1.frequency)
         
         keys=['Topic', 'Type', 'Message Count', 'Frequency']
-        self.topics_zipped = list(zip(self.topics,self.message_types, self.n_messages, self.frequency))
+        topics_zipped = list(zip(self.topics,self.message_types, self.n_messages, self.frequency))
 
         # Initialize the 'topics' dictionary in metadata
         self.metadata['topics'] = {}
 
         # Iterate over topics_zipped and populate the metadata
-        for topic_data in self.topics_zipped:
+        for topic_data in topics_zipped:
             topic_key = get_key_by_value(record_config["topics"],topic_data[0])
             # Create a key like 'topic1', 'topic2', etc.
             self.metadata['topics'][topic_key] = dict(zip(keys, topic_data))
@@ -132,6 +178,14 @@ class BadReader:
 
 
     def _init_raw_data(self):
+        """
+        Initialize the structure for storing raw data extracted from the bag file.
+
+        This method sets up a dictionary to store time and data for each recorded topic in the bag file.
+
+        Returns:
+            dict: A dictionary with keys for each topic and sub-keys for 'time' and 'data'.
+        """
         dic = {}
         topics_recorded_keys = self.metadata['topics'].keys()
         
@@ -143,6 +197,17 @@ class BadReader:
         return dic
 
     def _init_aligned_data(self, aligned_topics=['odom','rgb']):
+        """
+        Initialize the structure for storing aligned data based on specified topics.
+
+        This method sets up a dictionary to store delta time, time elapsed, and data for each aligned topic.
+
+        Args:
+            aligned_topics (list of str): List of topics to be aligned. Defaults to ['odom', 'rgb'].
+
+        Returns:
+            dict: A dictionary with keys for delta time, time elapsed, and each aligned topic.
+        """
         dic = {}
         dic['dt'] = []
         dic['time_elapsed'] = []
@@ -155,6 +220,12 @@ class BadReader:
         return dic
     
     def _get_sync_rate(self):
+        """
+        Determine the synchronization rate for aligning data from different topics.
+
+        Returns:
+            float: The synchronization rate for data alignment.
+        """
         min_freq = np.inf
         
         for tk in self.aligned_data['topics'].keys():
@@ -167,11 +238,16 @@ class BadReader:
         return min_freq
 
     def _process_data(self):
+        """
+        Process data from the ROS bag file, aligning it according to the synchronization rate.
+
+        This method reads messages from the bag file, extracts raw data, and aligns them based on the sync rate.
+        It updates the raw_data and aligned_data attributes of the object.
+        """
 
         # get start time of bag in seconds
         currtime = self.reader.get_start_time()
         starttime = currtime
-        rate = 20 # <<<<<<<<<<<<<< change it
 
         for topic, msg, t in self.reader.read_messages(topics=self.topics):
             topic_key = self.topics_to_keys[topic]
@@ -201,6 +277,18 @@ class BadReader:
                 self.aligned_data['time_elapsed'].append(currtime - starttime)
 
     def get_raw_element(self,topic,msg):
+        """
+        Retrieve a raw data element based on the topic and message.
+
+        This method processes a ROS message from a given topic and converts it into a usable format.
+
+        Args:
+            topic (str): The topic of the data.
+            msg (rosbag message): The ROS message to be processed.
+
+        Returns:
+            Varies: The processed data element, the type depends on the topic.
+        """
         switcher = {
             # "depth": image_compressed_to_numpy,
             "depth": image_compressed_to_numpy,
@@ -212,6 +300,16 @@ class BadReader:
         return case_function(msg)
 
     def get_aligned_element(self,topic,data):
+        """
+        Process and align a data element based on the topic.
+
+        Args:
+            topic (str): The topic of the data.
+            data: The data element to be processed.
+
+        Returns:
+            Varies: The aligned data element, the type depends on the topic.
+        """
         switcher = {
             "depth": lambda x: x,
             "rgb": lambda x: x,
@@ -222,12 +320,34 @@ class BadReader:
         return case_function(data)
     
     def get_raw_dataset(self):
+        """
+        Return the entire raw data set.
+
+        Returns:
+            dict: The raw data set.
+        """
         return self.raw_data
 
     def get_aligned_dataset(self):
+        """
+        Return the entire aligned data set.
+
+        This method provides access to the data aligned based on the synchronization rate.
+
+        Returns:
+            dict: The aligned data set.
+        """
         return self.aligned_data
 
     def save_raw(self, data:dict):
+        """
+        Save the raw data to files in a specified format.
+
+        This method writes the raw data to files, organizing them based on the topics.
+
+        Args:
+            data (dict): The raw data to be saved.
+        """
 
         folder_path = os.path.join(self.dst_datafolder,'raw_data')
         if not os.path.exists(folder_path):
@@ -258,6 +378,14 @@ class BadReader:
                 print(f"[INFO]  {tk} raw data successfully saved.")
 
     def save_aligned(self, data:dict):
+        """
+        Save the aligned data to files in a specified format.
+
+        This method writes the aligned data to files, organizing them based on the topics.
+
+        Args:
+            data (dict): The aligned data to be saved.
+        """
 
         for tk in data['topics'].keys():
             if tk == 'odom':
@@ -278,6 +406,15 @@ class BadReader:
 
     
     def save_traj_video(self,data:dict, rate=10):
+        """
+        Generate and save a video visualizing the trajectory data.
+
+        This method creates a video to visualize the trajectory using the aligned data and saves it to a file.
+
+        Args:
+            data (dict): The aligned data used for creating the trajectory video.
+            rate (int): The rate at which frames are sampled from the data. Defaults to 10.
+        """
         
         # Extracting position and yaw values into separate numpy arrays
 
@@ -302,7 +439,7 @@ class BadReader:
             
             if i % rate == 0:
                 aggregated_positions.append(positions[i])
-                frame = self.visualization(location = np.array(aggregated_positions),
+                frame = TrajViz.visualization(location = np.array(aggregated_positions),
                                 yaw=yaws[i],
                                 curr_image=images[i],
                                 time=times[i],
@@ -315,70 +452,21 @@ class BadReader:
         ani = animation.ArtistAnimation(fig=fig,
                                         artists=Frames,
                                         interval=200)
-        
-        self.save_animation(ani=ani,dest_dir=self.dst_datafolder,file_name="traj_vid")
-        
-    @staticmethod
-    def visualization(location,
-                    yaw,
-                    curr_image,
-                    time,
-                    frame_idx,
-                    ax_image,
-                    ax_trajectory):
 
-        Frame=[]
-        
-        ax_trajectory.legend([f"Location"],loc="upper right")
-        ax_trajectory.grid()
+        TrajViz.save_animation(ani=ani,dest_dir=self.dst_datafolder,file_name="traj_sample")
 
-        plot_0=ax_image.imshow(curr_image)
-        Frame.append(plot_0)
-
-        plot_1,=ax_trajectory.plot(location[:,1],location[:,0],c="r")
-        Frame.append(plot_1)
-        
-        # if location.shape[0]>2:
-        #     plot_2 = ax_trajectory.arrow(location[-1,1],location[-1,0],
-        #                             location[-1,1]+np.cos(yaw)*0.001,#(abs(location[-1,1]-location[-2,1])),
-        #                             location[-1,0]+np.sin(-yaw)*0.001,#(abs(location[-1,0]-location[-2,0])),
-        #                             head_width = 0.000005,
-        #                             head_length = 0.000005)
-        #     Frame.append(plot_2)
-
-
-        title = ax_image.text((curr_image.shape[1])+10,0, "", bbox={'facecolor':'w', 'alpha':0.7, 'pad':5},
-                fontsize=12,
-                ha="left",
-                va="top")
-        title.set_text(f"Frame: {frame_idx} | Time: {time:.4f} [sec]")
-        Frame.append(title)
-        
-        return Frame
-
-    @staticmethod
-    def save_animation(ani, dest_dir, file_name):
-        """
-        save animation function
-        :param ani: animation object
-        :param basedir: the parent dir of the animation dir.
-        :param file_name: the animation name
-        :return: None
-        """
-        print("[INFO]  Saving animation")
-
-        gif_file_path = os.path.join(dest_dir, f'{file_name}.gif')
-        mp4_file_path = os.path.join(dest_dir, f'{file_name}.mp4')
-
-        writergif = animation.PillowWriter(fps=10)
-        ani.save(gif_file_path, writer=writergif)
-        
-        clip = mp.VideoFileClip(gif_file_path)
-        clip.write_videofile(mp4_file_path)
-        os.remove(gif_file_path)
-        print("[INFO]  Animation saved")
 
 class BagProcess:
+    """
+    A class for processing ROS bag files in batches or entire folders.
+
+    This class provides static methods to process ROS bag files from a given folder path. It supports processing
+    individual batches of bag files and entire folders containing multiple batches.
+
+    Methods:
+        process_batch: Processes a batch of ROS bag files from a specified folder.
+        process_folder: Processes multiple batches of ROS bag files from a specified folder.
+    """
     
     def __init__(self) -> None:
         pass
@@ -389,6 +477,19 @@ class BagProcess:
                     dst_datafolder_name: str = None,
                     save_raw: bool = False,
                     save_video: bool = True):
+        """
+        Process a batch of ROS bag files located in a specified folder.
+
+        This method reads the metadata from the specified folder and processes each unprocessed bag file found. It can
+        optionally save raw data and generate trajectory videos from the processed data.
+
+        Args:
+            bag_folder_path (str): Path to the folder containing ROS bag files.
+            dst_dataset (str, optional): Destination dataset path. Defaults to None.
+            dst_datafolder_name (str, optional): Name of the folder to store processed data. Defaults to None.
+            save_raw (bool, optional): Flag to save raw data from the bag files. Defaults to False.
+            save_video (bool, optional): Flag to save trajectory videos from the bag files. Defaults to True.
+        """
         
         print(f"[INFO] processing batch - {bag_folder_path}")
 
@@ -445,8 +546,21 @@ class BagProcess:
                     dst_datafolder_name: str = None,
                     save_raw: bool = False):
         
-        print(f"[INFO] processing folder - {folder_path}")
+        """
+        Process multiple batches of ROS bag files from a specified folder.
+
+        This method iterates through each subfolder within the specified folder, identified as a batch, and processes
+        the ROS bag files within using the `process_batch` method.
+
+        Args:
+            folder_path (str): Path to the folder containing multiple batches of ROS bag files.
+            dst_dataset (str, optional): Destination dataset path. Defaults to None.
+            dst_datafolder_name (str, optional): Name of the folder to store processed data. Defaults to None.
+            save_raw (bool, optional): Flag to save raw data from the bag files. Defaults to False.
+        """
         
+        print(f"[INFO] processing folder - {folder_path}")
+
         # Loop through each folder
         batches = [batch for batch in os.listdir(folder_path) if batch.startswith("bag_batch")]
 
@@ -458,9 +572,7 @@ class BagProcess:
                                         save_raw=save_raw)
 
 def main():
-    bag_batch_16comp = '/home/roblab20/catkin_ws/src/zion_ros/zion_zed_ros_interface/bag/bag_batch_2024-01-04-13-52-32'
-    bag_batch_16uncomp = '/home/roblab20/catkin_ws/src/zion_ros/zion_zed_ros_interface/bag/bag_batch_16_uncomp_2024-01-10-12-02-02'
-    bag_batch_32uncomp = '/home/roblab20/catkin_ws/src/zion_ros/zion_zed_ros_interface/bag/bag_batch_32_uncomp_2024-01-10-12-03-11'
+
     dst = '/home/roblab20/dev/bagtool/dataset'
     bp = BagProcess()
     
