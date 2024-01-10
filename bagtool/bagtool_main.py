@@ -4,17 +4,18 @@ from .compress.compress import BagCompress as bc
 from .process.process import BagProcess as bp
 
 def process(args):
-    
+
     if args.batch is not None:
         bp.process_batch(args.batch,
                         args.dst,
                         args.name,
-                        args.save_raw)
+                        args.no_raw)
+        
     elif args.folder is not None:
         bp.process_folder(args.folder,
                         args.dst,
                         args.name,
-                        args.save_raw)
+                        args.no_raw)
 
 def compress(args):
 
@@ -66,8 +67,8 @@ def main():
                             help='path to a dataset destination folder')
     parser_process.add_argument('-n', '--name',default=None,
                             help='a custom name for the datafolder')
-    parser_process.add_argument('-s', '--save_raw',action="store_true",
-                            help='indicate if saving raw data or not')
+    parser_process.add_argument('--no_raw',action="store_false",
+                            help='not saving raw data')
     parser_process.set_defaults(func=process)
 
     # Parse the args and call the default function

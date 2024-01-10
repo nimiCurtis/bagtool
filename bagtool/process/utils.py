@@ -49,7 +49,7 @@ def image_compressed_to_numpy(msg:CompressedImage)->np.ndarray:
     # Convert CompressedImage to OpenCV Image using np.frombuffer
     np_img = np.frombuffer(msg.data, dtype=np.uint8)
     np_img = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
-    
+
     return np_img
 
 def image_to_numpy(
