@@ -28,7 +28,6 @@ from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CompressedImage
 
 
-
 class TrajViz():
     """
     Methods:
@@ -79,11 +78,17 @@ class TrajViz():
     @staticmethod
     def save_animation(ani, dest_dir, file_name):
         """
-        save animation function
-        :param ani: animation object
-        :param dest_dir: the parent dir of the animation file.
-        :param file_name: the animation name
-        :return: None
+        Save an animation object to a file.
+
+        Args:
+            ani: The animation object to be saved. 
+                This is typically an instance of a Matplotlib animation.
+            dest_dir (str): The directory where the animation file will be saved.
+                It should be a valid directory path.
+            file_name (str): The name of the file to which the animation will be saved. The file name should include the extension.
+
+        Returns:
+            None: This function does not return anything. It saves the animation to the specified file.
         """
         print("[INFO]  Saving animation")
 
@@ -205,37 +210,40 @@ def image_compressed_to_numpy(msg:CompressedImage)->np.ndarray:
     return np_img
 
 def image_to_numpy(
-    msg, nchannels=3, empty_value=None, output_resolution=None, aggregate="none"
+    msg, empty_value=np.nan, output_resolution=None
 ):
     """
     Converts a ROS image message to a numpy array, with options for data manipulation.
 
     Args:
         msg: A ROS image message.
-        nchannels (int): Number of channels in the image.
         empty_value: A value to identify and replace missing data in the image.
         output_resolution (tuple, optional): Desired resolution of output image.
-        aggregate (str): Method for aggregating color channels.
 
     Returns:
         np.ndarray: The image represented as a numpy array.
     """
-    
+
     # Set default output resolution if not provided
     if output_resolution is None:
         output_resolution = (msg.width, msg.height)
 
     # Check if image encoding is RGB
     is_rgb = "8" in msg.encoding
+    is_depth16 = "16" in msg.encoding
+    is_depth32 = "32" in msg.encoding
     # Convert the image data to the appropriate format
     if is_rgb:
+        nchannels=3
         data = np.frombuffer(msg.data, dtype=np.uint8).copy()
-    else:
+        data = data.reshape(msg.height, msg.width, 4)[:,:,:nchannels]
+    elif is_depth16:
+        data = np.frombuffer(msg.data, dtype=np.uint16).copy()
+        data = data.reshape(msg.height, msg.width)
+    elif is_depth32:
         data = np.frombuffer(msg.data, dtype=np.float32).copy()
 
     # Reshape the data array according to image dimensions and number of channels
-    data = data.reshape(msg.height, msg.width, nchannels)
-
     # Replace empty values if specified
     if empty_value:
         mask = np.isclose(abs(data), empty_value)
@@ -249,22 +257,8 @@ def image_to_numpy(
         interpolation=cv2.INTER_AREA,
     )
 
-    # Aggregate the color channels if specified
-    if aggregate == "littleendian":
-        # Aggregate channels in little-endian order
-        data = sum([data[:, :, i] * (256**i) for i in range(nchannels)])
-    elif aggregate == "bigendian":
-        # Aggregate channels in big-endian order
-        data = sum([data[:, :, -(i + 1)] * (256**i) for i in range(nchannels)])
-
-    # Adjust the shape of the array based on the number of channels
-    if len(data.shape) == 2:
-        data = np.expand_dims(data, axis=0)
-    else:
-        data = np.moveaxis(data, 2, 0)  # Switch to channels-first format
-
     # Normalize the data if it is RGB
-    if is_rgb:
-        data = data.astype(np.float32) / (255.0 if aggregate == "none" else 255.0**nchannels)
+    if is_depth16:
+        data = np.array(256*data.astype(np.float32)/0x0fff,dtype=np.uint8)
 
     return data

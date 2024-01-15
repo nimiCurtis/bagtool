@@ -123,9 +123,10 @@ The resulted dataset from the example above will be as follow:
 ### TODO: 
 By priority Top-Down:
 
-- [ ] Check ros-to-numpy images encoding decoding include depth images.
+- [x] Check ros-to-numpy images encoding decoding include depth images.
+- [x] Check using the regular Image sensor msgs
 - [ ] Process based on params.yaml file
-- [ ] Check using the regular Image sensor msgs
+- [ ] Check using the compressed Image sensor msgs
 - [ ] Clean the main code in process.py
 - [ ] Add arguments for saving animation
 - [ ] Syncing more then two topics?

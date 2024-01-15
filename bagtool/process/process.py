@@ -196,7 +196,7 @@ class BadReader:
 
         return dic
 
-    def _init_aligned_data(self, aligned_topics=['odom','rgb']):
+    def _init_aligned_data(self, aligned_topics=['odom','depth']):
         """
         Initialize the structure for storing aligned data based on specified topics.
 
@@ -252,6 +252,7 @@ class BadReader:
         for topic, msg, t in self.reader.read_messages(topics=self.topics):
             topic_key = self.topics_to_keys[topic]
             # raw_data{topic_key} = function
+
             self.raw_data[topic_key]['time'].append(t.to_sec())
             data = self.get_raw_element(topic=topic_key,
                                 msg=msg)
@@ -291,8 +292,8 @@ class BadReader:
         """
         switcher = {
             # "depth": image_compressed_to_numpy,
-            "depth": image_compressed_to_numpy,
-            "rgb": image_compressed_to_numpy,
+            "depth": image_to_numpy,
+            "rgb": image_to_numpy,
             "odom": odom_to_numpy
         }
 
@@ -404,7 +405,6 @@ class BadReader:
 
             print(f"[INFO]  {tk} data successfully saved.")
 
-    
     def save_traj_video(self,data:dict, rate=10):
         """
         Generate and save a video visualizing the trajectory data.
@@ -422,7 +422,9 @@ class BadReader:
         positions = np.array([item['pos'] for item in odom_traj])
         yaws = np.array([item["yaw"] for item in odom_traj])
         times = np.array(data['time_elapsed'])
-        images = np.array(data['topics']['rgb'])
+        for tk in data['topics'].keys(): image_tk = tk if tk != 'odom' else None
+
+        images = np.array(data['topics'][image_tk])
 
         fig = plt.figure(figsize=[16, 12])
         grid = plt.GridSpec(12, 17, hspace=0.2, wspace=0.2)
