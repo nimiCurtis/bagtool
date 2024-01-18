@@ -44,7 +44,6 @@ class BadReader:
         dir (str): Directory of the bag file.
         dst_datafolder (str): Destination folder for processed data.
         metadata (dict): Metadata information of the bag file.
-        topic_tuple (tuple): Tuple containing information about topics in the bag file.
         topics (list): List of topics in the bag file.
         topics_to_keys (dict): Mapping of topics to their respective keys.
         message_types (list): List of message types in the topics.
@@ -68,15 +67,15 @@ class BadReader:
         save_aligned: Saves aligned data to files.
         save_traj_video: Generates and saves a trajectory video.
     """
-    def __init__(self, bagfile, dst_dataset = None, dst_datafolder_name=None) -> None:
+    def __init__(self, bagfile, dst_dataset = None, dst_datafolder_name=None, config = None) -> None:
         """
         Initialize the BadReader object with a ROS bag file and optional destination dataset and folder names.
 
         This method sets up the necessary attributes for reading and processing the bag file, including extracting metadata,
-        topics information, and initializing data structures for raw and aligned data.
+        topics information, and initializing data struct
+            bagfile (str): Path to the ures for raw and aligned data.
 
-        Args:
-            bagfile (str): Path to the ROS bag file to be read.
+        Args:ROS bag file to be read.
             dst_dataset (str, optional): Destination dataset path. Default is None.
             dst_datafolder_name (str, optional): Name of the folder to store processed data. Default is None.
         """
@@ -96,8 +95,9 @@ class BadReader:
             self.filename = bagfile
             self.dir = './'
 
-        data_folder_name = dst_datafolder_name if dst_datafolder_name is not None \
-                                            else 'bag-'+self.filename[0:-4]+'-data' 
+        data_folder_name_suffix = 'bag-'+self.filename[0:-4]+'-data'
+        data_folder_name = dst_datafolder_name + '_' + data_folder_name_suffix if dst_datafolder_name is not None \
+                                            else data_folder_name_suffix 
 
         if dst_dataset is not None:
             self.dst_datafolder = os.path.join(dst_dataset,data_folder_name)
@@ -109,7 +109,7 @@ class BadReader:
         self.metadata["source_filename"] = self.filename
         self.metadata["source_dir"] = self.dir
         self.metadata["data_dir"] = self.dst_datafolder
-        
+
         record_config_file = os.path.join(self.dir,
                                         "configs",
                                         "record.yaml")
@@ -125,18 +125,18 @@ class BadReader:
             sys.exit("Exiting program.")
 
         info = self.reader.get_type_and_topic_info()
-        self.topic_tuple = info.topics.values()
+        topic_tuple = info.topics.values()
         self.topics = info.topics.keys()
         self.topics_to_keys = {}
         
         self.message_types = []
-        for t1 in self.topic_tuple: self.message_types.append(t1.msg_type)
+        for t1 in topic_tuple: self.message_types.append(t1.msg_type)
 
         self.n_messages = []
-        for t1 in self.topic_tuple: self.n_messages.append(t1.message_count)
+        for t1 in topic_tuple: self.n_messages.append(t1.message_count)
 
         self.frequency = []
-        for t1 in self.topic_tuple: self.frequency.append(t1.frequency)
+        for t1 in topic_tuple: self.frequency.append(t1.frequency)
         
         keys=['Topic', 'Type', 'Message Count', 'Frequency']
         topics_zipped = list(zip(self.topics,self.message_types, self.n_messages, self.frequency))
@@ -162,9 +162,10 @@ class BadReader:
                 print(f"[INFO]  Successfully created the data folder {self.dst_datafolder}.")
 
         self.raw_data = self._init_raw_data()
-        self.aligned_data = self._init_aligned_data()
+        self.aligned_data = self._init_aligned_data(aligned_topics = config.get("aligned_topics") if config is not None \
+                                                    else None)
         
-        self.sync_rate = self._get_sync_rate() ## <<<<<< or from a params file 
+        self.sync_rate = config.get("sync_rate") if config is not None else self._get_sync_rate() 
         self.metadata['sync_rate'] = self.sync_rate
         
         self._process_data()
@@ -174,7 +175,6 @@ class BadReader:
         print(f"[INFO]  Saving metadata.")
         with open(metadata_file_p, 'w') as file:
             json.dump(self.metadata, file, indent=4)
-        
 
 
     def _init_raw_data(self):
@@ -196,7 +196,7 @@ class BadReader:
 
         return dic
 
-    def _init_aligned_data(self, aligned_topics=['odom','depth']):
+    def _init_aligned_data(self, aligned_topics=['odom','rgb']):
         """
         Initialize the structure for storing aligned data based on specified topics.
 
@@ -213,12 +213,12 @@ class BadReader:
         dic['time_elapsed'] = []
         dic['topics'] = {}
         topics_aligned_keys = aligned_topics
-        
+
         for tk in topics_aligned_keys:
             dic['topics'][tk] = []
 
         return dic
-    
+
     def _get_sync_rate(self):
         """
         Determine the synchronization rate for aligning data from different topics.
@@ -234,7 +234,7 @@ class BadReader:
                 
                 if freq < min_freq:
                     min_freq = freq
-        
+
         return min_freq
 
     def _process_data(self):
@@ -260,7 +260,7 @@ class BadReader:
 
             # aligned data
             if (t.to_sec() - currtime) >= 1.0 / self.sync_rate:
-                # if topic_key in self.aligned_data.keys():
+
                 for tk in self.aligned_data['topics'].keys():
                     data_aligned = self.raw_data[tk]['data'][-1]
                     data_aligned = self.get_aligned_element(topic=tk,
@@ -432,8 +432,6 @@ class BadReader:
         ax_image = fig.add_subplot(grid[1:6, :], title=f"Scene Image")
         ax_trajectory = fig.add_subplot(grid[7:, :], title="Trajectory", xlabel="Y [m]", ylabel="X [m]")
         ax_trajectory.invert_xaxis()
-
-        # ax_title = fig.add_subplot(grid[:1, :])
         
         aggregated_positions = []
         Frames = []
@@ -478,7 +476,8 @@ class BagProcess:
                     dst_dataset: str = None,
                     dst_datafolder_name: str = None,
                     save_raw: bool = False,
-                    save_video: bool = True):
+                    save_video: bool = True,
+                    config: dict = None):
         """
         Process a batch of ROS bag files located in a specified folder.
 
@@ -519,15 +518,19 @@ class BagProcess:
                     bagfile = os.path.join(bag_folder_path,filename)
                     bag_reader = BadReader(bagfile=bagfile,
                                         dst_dataset=dst_dataset, 
-                                        dst_datafolder_name=dst_datafolder_name)
+                                        dst_datafolder_name=dst_datafolder_name,
+                                        config=config)
+                    
                     raw_data = bag_reader.get_raw_dataset()
                     aligned_data = bag_reader.get_aligned_dataset()
 
                     bag_reader.save_aligned(aligned_data)
                     
-                    save_raw = True
+                    save_raw = save_raw
                     if save_raw:
                         bag_reader.save_raw(raw_data)
+                    
+                    save_video = save_video if config is None else config.get("save_vid", True)
                     if save_video:
                         bag_reader.save_traj_video(aligned_data)
                         
@@ -536,17 +539,19 @@ class BagProcess:
                 else:
                     print(f"[INFO] Bag {filename} already processed")
 
-            
+
         # Writing the updated data back to the file
         with open(metadata_file_p, 'w') as file:
             json.dump(metadata, file, indent=4)
 
 
     @staticmethod
-    def process_folder(folder_path: str,
+    def process_folder(folder_path: str =None,
                     dst_dataset: str = None,
                     dst_datafolder_name: str = None,
-                    save_raw: bool = False):
+                    save_raw: bool = False,
+                    config:dict = None
+                    ):
         
         """
         Process multiple batches of ROS bag files from a specified folder.
@@ -559,29 +564,61 @@ class BagProcess:
             dst_dataset (str, optional): Destination dataset path. Defaults to None.
             dst_datafolder_name (str, optional): Name of the folder to store processed data. Defaults to None.
             save_raw (bool, optional): Flag to save raw data from the bag files. Defaults to False.
+            config (dict, optional): Configuration dictionary containing necessary arguments. Defaults to None.
+
         """
         
         print(f"[INFO] processing folder - {folder_path}")
 
+
+        # Ensure that either config is provided or the other arguments, but not both
+        assert (config is None) != (folder_path is None), "Either provide a config dictionary or the individual arguments, but not both"
+
+        if config:
+            # Extract arguments from config
+            folder_path = config.get('bags_folder')
+            dst_dataset = config.get('destination_folder')
+            save_raw = config.get('save_raw', True)  # Default to False if not in config
+
         # Loop through each folder
         batches = [batch for batch in os.listdir(folder_path) if batch.startswith("bag_batch")]
 
+        # if config is not none:
+        # use the bag_folder_path
+        # use the destination_path
+        # use save_raw 
+
         for batch in tqdm(batches, desc="Processing batches"):
                 batch_path = os.path.join(folder_path, batch)
+                record_config_file = os.path.join(batch_path,
+                                        "configs",
+                                        "record.yaml")
+
+                # Open the record config file
+                with open(record_config_file, 'r') as file:
+                    record_config = yaml.safe_load(file)
+                
+                demonstrator = record_config["recording"]["demonstrator"]
+                dst_datafolder_name = demonstrator if dst_datafolder_name is None else dst_datafolder_name 
+                
                 BagProcess.process_batch(bag_folder_path=batch_path,
                                         dst_dataset=dst_dataset,
                                         dst_datafolder_name = dst_datafolder_name,
-                                        save_raw=save_raw)
+                                        save_raw=save_raw,
+                                        config=config.get(demonstrator))
+
 
 def main():
 
-    dst = '/home/roblab20/dev/bagtool/dataset'
     bp = BagProcess()
-    
+
     # bp.process_batch(bag_folder_path=bag_batch_16comp,
     #                 dst_dataset=dst)
-    bp.process_folder(folder_path='/home/roblab20/catkin_ws/src/zion_ros/zion_zed_ros_interface/bag',
-                    dst_dataset=dst)
+    config_path = 'process_bag_config.yaml'
+    with open(config_path, 'r') as file:
+            process_config = yaml.safe_load(file)
+    
+    bp.process_folder(config=process_config)
     a=1
 
 if __name__ == "__main__":

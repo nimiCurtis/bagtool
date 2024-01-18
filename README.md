@@ -84,6 +84,42 @@ dest = '<some_path>/dataset'
 bp.process_folder(source,dest)
 ```
 
+**Using custom script + .yaml config**
+We can a extract the dataset from a recordings database using custom config file.
+Such a config would looks as follow:
+
+```yaml
+bags_folder: "/home/roblab20/catkin_ws/src/zion_ros/zion_zed_ros_interface/bag"
+destination_folder: "/home/roblab20/dev/bagtool/dataset"
+save_raw: true                        # I dont see a reason why to set it to false
+
+demonstrator_name:                    # demonstrator/robot name
+  aligned_topics: ["odom", "rgb"]     # pick topics to be aligned
+  sync_rate: 20                       # alignment rate, if null we will 
+                                      # use the min frequency, from the aligned topics frequency
+  save_vid: true                      # saving video
+  ## more params .. 
+```
+
+Process file would looks as follow:
+```python
+import yaml
+from bagtool.process.process import BagProcess
+
+def main():
+    bp = BagProcess()
+    config_path = '<path to yaml file>'
+    with open(config_path, 'r') as file:
+            process_config = yaml.safe_load(file)
+    
+    bp.process_folder(config=process_config)
+
+if __name__ == "__main__":
+    main()
+```
+
+
+
 **Dataset structure:**
 
 The resulted dataset from the example above will be as follow:
@@ -125,11 +161,11 @@ By priority Top-Down:
 
 - [x] Check ros-to-numpy images encoding decoding include depth images.
 - [x] Check using the regular Image sensor msgs
-- [ ] Process based on params.yaml file
-- [ ] Check using the compressed Image sensor msgs
+- [x] Process based on params.yaml file
 - [ ] Clean the main code in process.py
-- [ ] Add arguments for saving animation
 - [ ] Syncing more then two topics?
-- [ ] Support more topics types
-- [ ] Add arrow to the traj animation indicating the yaw direction
+- [ ] Support more topics types -> when we start working on different robots
+- [ ] Add arrow to the traj animation indicating the yaw direction ?
 - [ ] Add deltas of positions and yaw to the traj_data.json ? 
+- [ ] handling with 32bit depth images ? 
+- [ ] Check using the compressed Image sensor msgs
