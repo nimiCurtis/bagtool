@@ -84,8 +84,10 @@ dest = '<some_path>/dataset'
 bp.process_folder(source,dest)
 ```
 
-**Using custom script + .yaml config**
+**Using custom script + .yaml config:**
+
 We can a extract the dataset from a recordings database using custom config file.
+
 Such a config would looks as follow:
 
 ```yaml
@@ -104,11 +106,11 @@ demonstrator_name:                    # demonstrator/robot name
 Process file would looks as follow:
 ```python
 import yaml
-from bagtool.process.process import BagProcess
+from bagtool.process.process import BagProcess as bp
 
 def main():
-    bp = BagProcess()
-    config_path = '<path to yaml file>'
+    
+    config_path = 'process_bag_config.yaml'
     with open(config_path, 'r') as file:
             process_config = yaml.safe_load(file)
     

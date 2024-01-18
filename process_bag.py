@@ -16,12 +16,10 @@
 import yaml
 
 # Custom libraries
-from bagtool.process.process import BagProcess
+from bagtool.process.process import BagProcess as bp
 
 def main():
-
-    bp = BagProcess()
-
+    
     config_path = 'process_bag_config.yaml'
     with open(config_path, 'r') as file:
             process_config = yaml.safe_load(file)
