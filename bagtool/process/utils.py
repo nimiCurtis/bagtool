@@ -210,7 +210,7 @@ def image_compressed_to_numpy(msg:CompressedImage)->np.ndarray:
     return np_img
 
 def image_to_numpy(
-    msg, empty_value=np.nan, output_resolution=None
+    msg, empty_value=None, output_resolution=None
 ):
     """
     Converts a ROS image message to a numpy array, with options for data manipulation.
@@ -242,14 +242,18 @@ def image_to_numpy(
         data = data.reshape(msg.height, msg.width)
     elif is_depth32:
         data = np.frombuffer(msg.data, dtype=np.float32).copy()
+        data = data.reshape(msg.height, msg.width)
 
     # Reshape the data array according to image dimensions and number of channels
     # Replace empty values if specified
     if empty_value:
         mask = np.isclose(abs(data), empty_value)
-        fill_value = np.percentile(data[~mask], 99)
-        data[mask] = fill_value
-
+    else:
+        mask = np.isnan(data)
+    
+    fill_value = np.percentile(data[~mask], 99)
+    data[mask] = fill_value
+    
     # Resize the image to the desired output resolution
     data = cv2.resize(
         data,
@@ -261,4 +265,18 @@ def image_to_numpy(
     if is_depth16:
         data = np.array(256*data.astype(np.float32)/0x0fff,dtype=np.uint8)
 
+    # Create a mask to filter out NaN and Inf values
+    # valid_mask = np.isfinite(depth_image)
+
+    # # Replace NaN and Inf values with a value outside the desired range (e.g., 0)
+    # depth_image[~valid_mask] = 0
+
+    # # Normalize the depth values to the range [0, 255]
+    # min_depth = np.min(depth_image[valid_mask])
+    # max_depth = np.max(depth_image[valid_mask])
+    # normalized_depth = ((depth_image - min_depth) / (max_depth - min_depth) * 255).astype(np.uint8)
+
+    # # Convert the normalized depth image to an 8-bit unsigned integer image
+    # depth_8bit = cv2.convertScaleAbs(normalized_depth)
+    
     return data
