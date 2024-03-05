@@ -1,0 +1,305 @@
+left_camera_info:
+  D:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  K:
+  - 224.34518432617188
+  - 0.0
+  - 207.72232055664062
+  - 0.0
+  - 224.1700439453125
+  - 119.83968353271484
+  - 0.0
+  - 0.0
+  - 1.0
+  P:
+  - 224.34518432617188
+  - 0.0
+  - 207.72232055664062
+  - 0.0
+  - 0.0
+  - 224.1700439453125
+  - 119.83968353271484
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+  - 0.0
+  R:
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+  binning_x: 0
+  binning_y: 0
+  distortion_model: plumb_bob
+  header:
+    frame_id: zedm_left_camera_optical_frame
+    seq: 6539
+    stamp:
+      nsecs: 343552864
+      secs: 1708432188
+  height: 240
+  roi:
+    do_rectify: false
+    height: 0
+    width: 0
+    x_offset: 0
+    y_offset: 0
+  width: 427
+right_camera_info:
+  D:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  K:
+  - 224.34518432617188
+  - 0.0
+  - 207.72232055664062
+  - 0.0
+  - 224.1700439453125
+  - 119.83968353271484
+  - 0.0
+  - 0.0
+  - 1.0
+  P:
+  - 224.34518432617188
+  - 0.0
+  - 207.72232055664062
+  - -14.094823837280273
+  - 0.0
+  - 224.1700439453125
+  - 119.83968353271484
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+  - 0.0
+  R:
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+  binning_x: 0
+  binning_y: 0
+  distortion_model: plumb_bob
+  header:
+    frame_id: zedm_right_camera_optical_frame
+    seq: 0
+    stamp:
+      nsecs: 376935864
+      secs: 1708432188
+  height: 240
+  roi:
+    do_rectify: false
+    height: 0
+    width: 0
+    x_offset: 0
+    y_offset: 0
+  width: 427
+tf_static_base_to_optical:
+  transforms:
+  - child_frame_id: base_link
+    header:
+      frame_id: base_footprint
+      seq: 0
+      stamp:
+        nsecs: 434877912
+        secs: 1708431813
+    transform:
+      rotation:
+        w: 1.0
+        x: 0.0
+        y: 0.0
+        z: 0.0
+      translation:
+        x: 0.0
+        y: 0.0
+        z: 0.01
+  - child_frame_id: caster_back_link
+    header:
+      frame_id: base_link
+      seq: 0
+      stamp:
+        nsecs: 434892984
+        secs: 1708431813
+    transform:
+      rotation:
+        w: 0.7073882691671998
+        x: -0.706825181105366
+        y: 0.0
+        z: 0.0
+      translation:
+        x: -0.081
+        y: 0.0
+        z: -0.004
+  - child_frame_id: imu_link
+    header:
+      frame_id: base_link
+      seq: 0
+      stamp:
+        nsecs: 434894456
+        secs: 1708431813
+    transform:
+      rotation:
+        w: 1.0
+        x: 0.0
+        y: 0.0
+        z: 0.0
+      translation:
+        x: -0.032
+        y: 0.0
+        z: 0.068
+  - child_frame_id: zedm_base_link
+    header:
+      frame_id: zedm_camera_link
+      seq: 0
+      stamp:
+        nsecs: 434896760
+        secs: 1708431813
+    transform:
+      rotation:
+        w: 0.9238791810922129
+        x: 0.0
+        y: 0.38268428076468186
+        z: 0.0
+      translation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+  - child_frame_id: zedm_camera_center
+    header:
+      frame_id: zedm_base_link
+      seq: 0
+      stamp:
+        nsecs: 434898616
+        secs: 1708431813
+    transform:
+      rotation:
+        w: 1.0
+        x: 0.0
+        y: 0.0
+        z: 0.0
+      translation:
+        x: 0.0
+        y: 0.0
+        z: 0.01325
+  - child_frame_id: zedm_camera_link
+    header:
+      frame_id: base_footprint
+      seq: 0
+      stamp:
+        nsecs: 434903032
+        secs: 1708431813
+    transform:
+      rotation:
+        w: 1.0
+        x: 0.0
+        y: 0.0
+        z: 0.0
+      translation:
+        x: 0.032
+        y: -0.03
+        z: 0.18
+  - child_frame_id: zedm_left_camera_frame
+    header:
+      frame_id: zedm_camera_center
+      seq: 0
+      stamp:
+        nsecs: 434904376
+        secs: 1708431813
+    transform:
+      rotation:
+        w: 1.0
+        x: 0.0
+        y: 0.0
+        z: 0.0
+      translation:
+        x: 0.0
+        y: 0.03
+        z: 0.0
+  - child_frame_id: zedm_left_camera_optical_frame
+    header:
+      frame_id: zedm_left_camera_frame
+      seq: 0
+      stamp:
+        nsecs: 434905720
+        secs: 1708431813
+    transform:
+      rotation:
+        w: -0.5000000000000001
+        x: 0.5
+        y: -0.4999999999999999
+        z: 0.5
+      translation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+  - child_frame_id: zedm_right_camera_frame
+    header:
+      frame_id: zedm_camera_center
+      seq: 0
+      stamp:
+        nsecs: 434906552
+        secs: 1708431813
+    transform:
+      rotation:
+        w: 1.0
+        x: 0.0
+        y: 0.0
+        z: 0.0
+      translation:
+        x: 0.0
+        y: -0.03
+        z: 0.0
+  - child_frame_id: zedm_right_camera_optical_frame
+    header:
+      frame_id: zedm_right_camera_frame
+      seq: 0
+      stamp:
+        nsecs: 434908920
+        secs: 1708431813
+    transform:
+      rotation:
+        w: -0.5000000000000001
+        x: 0.5
+        y: -0.4999999999999999
+        z: 0.5
+      translation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+tf_static_imu:
+  transforms:
+  - child_frame_id: zedm_imu_link
+    header:
+      frame_id: zedm_left_camera_frame
+      seq: 0
+      stamp:
+        nsecs: 501101048
+        secs: 1708431819
+    transform:
+      rotation:
+        w: 0.999992847442627
+        x: -0.0008802615338936448
+        y: -0.0016603358089923859
+        z: 0.0032686591148376465
+      translation:
+        x: -0.0020000000949949026
+        y: -0.015238001942634583
+        z: -0.0017060001846402884
