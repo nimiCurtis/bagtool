@@ -158,17 +158,24 @@ class BadReader:
                 os.mkdir(self.dst_datafolder)
             except OSError:
                 print(f"[ERROR] Failed to create the data folder {self.dst_datafolder}.")
+                sys.exit("Exiting program.")
             else:
                 print(f"[INFO]  Successfully created the data folder {self.dst_datafolder}.")
 
+
         self.raw_data = self._init_raw_data()
+        
+        self.A = None
         self.aligned_data = self._init_aligned_data(aligned_topics = config.get("aligned_topics") if config is not None \
                                                     else None)
         
         self.sync_rate = config.get("sync_rate") if config is not None else self._get_sync_rate() 
         self.metadata['sync_rate'] = self.sync_rate
+
+        self._process_data(sync_rate=self.sync_rate,
+                        pre_truncated=config.get("pre_truncated"),
+                        post_truncated=config.get("post_truncated"))
         
-        self._process_data()
         self.metadata['num_of_synced_msgs'] = len(self.aligned_data['dt'])
         self.metadata['demonstrator'] = record_config['recording']['demonstrator']
 
@@ -237,7 +244,7 @@ class BadReader:
 
         return min_freq
 
-    def _process_data(self):
+    def _process_data(self, sync_rate, pre_truncated, post_truncated):
         """
         Process data from the ROS bag file, aligning it according to the synchronization rate.
 
@@ -248,26 +255,31 @@ class BadReader:
         # get start time of bag in seconds
         currtime = self.reader.get_start_time()
         starttime = currtime
-
+        end_time = self.reader.get_end_time()
+        
         for topic, msg, t in self.reader.read_messages(topics=self.topics):
             topic_key = self.topics_to_keys[topic]
             # raw_data{topic_key} = function
 
-            self.raw_data[topic_key]['time'].append(t.to_sec())
-            data = self.get_raw_element(topic=topic_key,
-                                msg=msg)
-            self.raw_data[topic_key]['data'].append(data)
+            if (topic_key in self.aligned_data["topics"].keys()): ## change!!! 
+                self.raw_data[topic_key]['time'].append(t.to_sec())
+                data = self.get_raw_element(topic=topic_key,
+                                    msg=msg)
+                self.raw_data[topic_key]['data'].append(data)
 
             # aligned data
-            if (t.to_sec() - currtime) >= 1.0 / self.sync_rate:
+            if ((t.to_sec() - currtime) >= 1.0 / sync_rate):
+                
+                if((currtime > starttime + pre_truncated) and (currtime < end_time - post_truncated)    \
+                    and (t.to_sec() > starttime + pre_truncated) and (t.to_sec() < end_time - post_truncated)):
 
-                for tk in self.aligned_data['topics'].keys():
-                    data_aligned = self.raw_data[tk]['data'][-1]
-                    data_aligned = self.get_aligned_element(topic=tk,
-                                                    data=data_aligned)
+                    for tk in self.aligned_data['topics'].keys():
+                        data_aligned = self.raw_data[tk]['data'][-1]
+                        data_aligned = self.get_aligned_element(topic=tk,
+                                                        data=data_aligned)
 
-                    self.aligned_data['topics'][tk].append(data_aligned)
-
+                        self.aligned_data['topics'][tk].append(data_aligned)
+                    
                 currtime = t.to_sec()
                 if len(self.aligned_data['time_elapsed']) > 0:
                     prevtime = self.aligned_data['time_elapsed'][-1]
@@ -276,7 +288,25 @@ class BadReader:
                     self.aligned_data['dt'].append(0)
 
                 self.aligned_data['time_elapsed'].append(currtime - starttime)
+            
+        # def init_aligned_dic(self,dic,tk):
+    #     if(tk == 'odom'):
+    #         dic = {tk:{}}
+    #         for frame in ['gt_frame','odom_frame','relative_frame']:
+    #             dic['topics'][tk].update({frame:{'position':[],'yaw':[]}})
 
+    #     else:
+    #         dic = {tk:[]}
+            
+    # def update_aligned_dic(self,tk,data):
+        
+    #     if(tk == 'odom'):
+    #         for type in ['position','yaw']:
+    #             for frame in ['gt_frame','odom_frame','relative_frame']:
+    #                 self.aligned_data['topics'][tk][frame][type].append(data[frame][type])
+    #     else:
+    #         self.aligned_data['topics'][tk].append(data)
+        
     def get_raw_element(self,topic,msg):
         """
         Retrieve a raw data element based on the topic and message.
@@ -318,8 +348,18 @@ class BadReader:
         }
 
         case_function = switcher.get(topic)
-        return case_function(data)
-    
+        
+        if(topic == "odom"):
+            prev_data = self.aligned_data['topics'][topic][-1] if len(self.aligned_data['topics'][topic])>0 else None
+            
+            if prev_data is None:
+                x_start, y_start, yaw_start = data[0][0], data[0][1], quat_to_yaw(data[1])
+                self.A = get_transform_to_start(x_start, y_start, yaw_start)
+            
+            return case_function(data, prev_data, self.A)
+        else:
+            return case_function(data)
+
     def get_raw_dataset(self):
         """
         Return the entire raw data set.
@@ -390,13 +430,22 @@ class BadReader:
 
         for tk in data['topics'].keys():
             if tk == 'odom':
+                
                 filename = 'traj_data'
                 file_path = os.path.join(self.dst_datafolder,filename+'.json')
+                
+                dic_to_save = {}
+                for frame in ['gt_frame','odom_frame','relative_frame']:
+                    dic_to_save.update({frame:{'position':[],'yaw':[]}})
+                    for type in ['position','yaw']:
+                        for i in range(len(data['topics']['odom'])):
+                            dic_to_save[frame][type].append(data['topics']['odom'][i][frame][type])
+                
                 with open(file_path, 'w') as file:
-                    json.dump(data['topics']['odom'], file, indent=4)
+                    json.dump(dic_to_save, file, indent=4)
 
             elif tk in ['rgb','depth']:
-                folder_path = os.path.join(self.dst_datafolder,'visaul_data')
+                folder_path = os.path.join(self.dst_datafolder,'visual_data')
                 if not os.path.exists(folder_path):
                     os.mkdir(folder_path)
                     for i, img in enumerate(self.aligned_data['topics'][tk]):
@@ -419,8 +468,9 @@ class BadReader:
         # Extracting position and yaw values into separate numpy arrays
 
         odom_traj = data['topics']['odom']
-        positions = np.array([item['pos'] for item in odom_traj])
-        yaws = np.array([item["yaw"] for item in odom_traj])
+        positions = np.array([item['odom_frame']['position'] for item in odom_traj])
+        
+        yaws = np.array([item['odom_frame']['yaw'] for item in odom_traj])
         times = np.array(data['time_elapsed'])
         for tk in data['topics'].keys(): image_tk = tk if tk != 'odom' else None
 
@@ -431,6 +481,9 @@ class BadReader:
         
         ax_image = fig.add_subplot(grid[1:6, :], title=f"Scene Image")
         ax_trajectory = fig.add_subplot(grid[7:, :], title="Trajectory", xlabel="Y [m]", ylabel="X [m]")
+        
+        x_lim = np.max([abs(np.max(positions[:,1])),  abs(np.min(positions[:,1]))])
+        ax_trajectory.set_xlim(xmin=-x_lim-0.1,xmax=x_lim + 0.1)
         ax_trajectory.invert_xaxis()
         
         aggregated_positions = []
@@ -581,7 +634,7 @@ class BagProcess:
             save_raw = config.get('save_raw', True)  # Default to False if not in config
 
         # Loop through each folder
-        batches = [batch for batch in os.listdir(folder_path) if batch.startswith("bag_batch")]
+        batches = [batch for batch in os.listdir(folder_path)]
 
         # if config is not none:
         # use the bag_folder_path
@@ -605,7 +658,7 @@ class BagProcess:
                                         dst_dataset=dst_dataset,
                                         dst_datafolder_name = dst_datafolder_name,
                                         save_raw=save_raw,
-                                        config=config.get(demonstrator))
+                                        config=config.get(demonstrator)) ## why I did it like this ????????
 
 
 def main():

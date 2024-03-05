@@ -50,8 +50,11 @@ class TrajViz():
         
         ax_trajectory.legend([f"Location"],loc="upper right")
         ax_trajectory.grid()
+        # Swap red and blue channels
+        curr_image_red_blue_swapped = curr_image[:, :, ::-1]
+        plot_0=ax_image.imshow(curr_image_red_blue_swapped)
+        # plot_0=ax_image.imshow(curr_image)
 
-        plot_0=ax_image.imshow(curr_image)
         Frame.append(plot_0)
 
         plot_1,=ax_trajectory.plot(location[:,1],location[:,0],c="r")
@@ -156,26 +159,71 @@ def odom_to_numpy(msg:Odometry):
     
     # Convert the extracted values to numpy arrays and return them
     return [np.array(pos), np.array(ori), np.array(lin_vel), np.array(angular_vel)]
-    
 
-def np_odom_to_xy_yaw(np_odom:np.ndarray)->Any:
+
+
+def np_odom_to_xy_yaw(np_odom:np.ndarray, prev_data, Ao)->Any:
     """
     Extracts x, y coordinates and yaw angle from a numpy representation of Odometry.
 
     Args:
         np_odom (np.ndarray): Numpy representation of Odometry, typically output of `odom_to_numpy` function.
-
+        t (int): step 
     Returns:
-        A dictionary containing 'pos', a list of x and y coordinates, and 'yaw', the yaw angle.
+        A dictionary containing 'pos', a list of x and y coordinates, and 'yaw', the yaw angle [radians].
     """
-    x, y = np_odom[0][0], np_odom[0][1]
-    yaw = quat_to_yaw(np_odom[1])
-    return {'pos':[x,y], 'yaw': yaw}
+    
+    x_gt, y_gt = np_odom[0][0], np_odom[0][1]
+    yaw_gt = quat_to_yaw(np_odom[1])
+    
+    
+    vt =  np_odom[2][0]
+    wt = np_odom[3][2] if np_odom[3][2] != 0 else 10**-7
+    
+    if(prev_data is not None):
+        pos_in_odom = Ao @ np.array([x_gt, y_gt, 1]).T
+        x_in_odom, y_in_odom = pos_in_odom[0], pos_in_odom[1]
+        prev_x_in_odom, prev_y_in_odom = prev_data['odom_frame']['position'][0], prev_data['odom_frame']['position'][1]
+        dx_in_odom, dy_in_odom = x_in_odom - prev_x_in_odom,y_in_odom - prev_y_in_odom
+        
+        dyaw = normalize_angle(yaw_gt) - normalize_angle(prev_data['gt_frame']['yaw'])
+        prev_yaw_in_odom = prev_data['odom_frame']['yaw']
+        yaw_in_odom = prev_yaw_in_odom + dyaw
+        yaw_in_odom = normalize_angle(yaw_in_odom)
+        
+        Ar = get_transform_to_start(prev_x_in_odom,prev_y_in_odom,prev_yaw_in_odom)
+        
+        pos_rel_to_prev = Ar @ np.array([x_in_odom, y_in_odom, 1]).T
+        x_rel, y_rel =  pos_rel_to_prev[0], pos_rel_to_prev[1]
+        yaw_rel = dyaw
+        
+        
+    else:
+        x_in_odom, y_in_odom = 0. , 0.
+        yaw_in_odom = 0.
+        dx_in_odom, dy_in_odom = 0. , 0.
+        dyaw = 0
+        
+        x_rel, y_rel =  0. , 0.
+        yaw_rel = 0.
 
 
+    return {'gt_frame':{'position':[x_gt, y_gt], 'yaw': yaw_gt},
+            'odom_frame':{'position':[x_in_odom,y_in_odom], 'yaw': yaw_in_odom, 'dpos':[dx_in_odom, dy_in_odom],'dyaw': dyaw},
+            'relative_frame':{'position':[x_rel,y_rel], 'yaw': yaw_rel}}
+
+def get_transform_to_start(x_start, y_start, yaw_start):
+    
+    A = np.array([[np.cos(yaw_start), -np.sin(yaw_start), x_start],
+                [  np.sin(yaw_start), np.cos(yaw_start) , y_start],
+                [  0             , 0              ,1]])
+    Ainv = np.linalg.inv(A)
+    
+    return Ainv
+    
 def quat_to_yaw(quat: np.ndarray) -> float:
     """
-    Converts a quaternion to a yaw angle.
+    Converts a quaternion to a yaw angle [radians].
 
     Args:
         quat (np.ndarray): A numpy array representing a quaternion in the order [x, y, z, w].
@@ -191,6 +239,25 @@ def quat_to_yaw(quat: np.ndarray) -> float:
     t4 = 1.0 - 2.0 * (y * y + z * z)
     yaw = np.arctan2(t3, t4)
     return yaw
+
+
+def normalize_angle(angle):
+    if -np.pi < angle <= np.pi:
+        return angle
+    if angle > np.pi:
+        angle = angle - 2 * np.pi
+    if angle <= -np.pi:
+        angle = angle + 2 * np.pi
+    return normalize_angle(angle)
+
+
+def normalize_angles_array(angles):
+    z = np.zeros_like(angles)
+    for i in range(angles.shape[0]):
+        z[i] = normalize_angle(angles[i])
+    return z
+
+
 
 def image_compressed_to_numpy(msg:CompressedImage)->np.ndarray:
     """

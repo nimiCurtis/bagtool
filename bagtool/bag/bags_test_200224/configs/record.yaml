@@ -1,0 +1,22 @@
+recording:
+  bag_folder: ../../bag
+  demonstrator: turtlebot
+  prefix: turtlebot_lab_linefollow
+  script: record_zed.sh
+  topics_to_rec:
+  - rgb
+  - odom
+  - imu
+  - joint_states
+  - cmd_vel
+topics:
+  cmd_vel: /turtlebot/cmd_vel
+  depth: /zedm/zed_node/depth/depth_registered
+  imu: /turtlebot/imu
+  joint_states: /turtlebot/joint_states
+  odom: /turtlebot/odom
+  pcl: /zedm/zed_node/point_cloud/cloud_registered
+  pose: /zedm/zed_node/pose_with_covariance
+  rgb: /zedm/zed_node/rgb/image_rect_color
+  tf: /tf
+  tf_static: /tf_static
