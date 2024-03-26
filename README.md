@@ -166,8 +166,10 @@ By priority Top-Down:
 - [x] Process based on params.yaml file
 - [ ] Clean the main code in process.py
 - [ ] Syncing more then two topics?
-- [ ] Support more topics types -> when we start working on different robots
+- [ ] Support object detection topic
+- [ ] Add visualization on plot for object detection topic
+
 - [ ] Add arrow to the traj animation indicating the yaw direction ?
-- [ ] Add deltas of positions and yaw to the traj_data.json ? 
+- [x] Add deltas of positions and yaw to the traj_data.json ? 
 - [ ] handling with 32bit depth images ? 
 - [ ] Check using the compressed Image sensor msgs

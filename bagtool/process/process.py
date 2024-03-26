@@ -665,14 +665,11 @@ def main():
 
     bp = BagProcess()
 
-    # bp.process_batch(bag_folder_path=bag_batch_16comp,
-    #                 dst_dataset=dst)
     config_path = 'process_bag_config.yaml'
     with open(config_path, 'r') as file:
             process_config = yaml.safe_load(file)
     
     bp.process_folder(config=process_config)
-    a=1
 
 if __name__ == "__main__":
     main()
