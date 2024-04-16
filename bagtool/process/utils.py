@@ -26,6 +26,7 @@ from matplotlib import animation
 # ROS libraries
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CompressedImage
+from zed_interfaces.msg import *
 
 
 class TrajViz():
@@ -156,10 +157,9 @@ def odom_to_numpy(msg:Odometry):
     angular_vel = [msg.twist.twist.angular.x,
                 msg.twist.twist.angular.y,
                 msg.twist.twist.angular.z]
-    
+
     # Convert the extracted values to numpy arrays and return them
     return [np.array(pos), np.array(ori), np.array(lin_vel), np.array(angular_vel)]
-
 
 
 def np_odom_to_xy_yaw(np_odom:np.ndarray, prev_data, Ao)->Any:
@@ -220,7 +220,8 @@ def get_transform_to_start(x_start, y_start, yaw_start):
     Ainv = np.linalg.inv(A)
     
     return Ainv
-    
+
+
 def quat_to_yaw(quat: np.ndarray) -> float:
     """
     Converts a quaternion to a yaw angle [radians].
@@ -257,6 +258,48 @@ def normalize_angles_array(angles):
         z[i] = normalize_angle(angles[i])
     return z
 
+## msg structure:
+## https://github.com/stereolabs/zed-ros-interfaces/tree/main/msg
+def object_detection_to_dic(msg: ObjectsStamped):
+    
+    # check there is detection
+    if len(msg.objects)>0 :
+        
+        obj = Object()
+        obj = msg.objects[0]
+        
+        instance_id = obj.instance_id
+        label = obj.label
+        label_id = obj.label_id
+        confidence = obj.confidence
+        tracking_state = obj.tracking_state
+        tacking_available = obj.tracking_available
+
+        position = list(obj.position)
+        position_covariance = list(obj.position_covariance)
+        velocity = list(obj.velocity)
+        
+        bbox3d = bbox3d_to_list(obj.bounding_box_3d)
+        bbox2d = bbox2d_to_list(obj.bounding_box_2d)
+    
+    return {
+        "label": label, "label_id": label_id, "instance_id": instance_id,
+        "confidence": confidence, "tracking_state": tracking_state,"tacking_available": tacking_available,
+        "position": position, "position_covariance": position_covariance, "velocity": velocity, 
+        "bbox3d": bbox3d,"bbox2d": bbox2d           
+    }
+
+def bbox3d_to_list(msg: BoundingBox3D):
+    corners = []
+    for corner in msg.corners:
+        corners.append(corner.kp)
+    return corners
+
+def bbox2d_to_list(msg: BoundingBox2Di):
+    corners = []
+    for corner in msg.corners:
+        corners.append(corner.kp)
+    return corners
 
 
 def image_compressed_to_numpy(msg:CompressedImage)->np.ndarray:

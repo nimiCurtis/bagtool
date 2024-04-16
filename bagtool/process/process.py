@@ -147,7 +147,8 @@ class BadReader:
         # Iterate over topics_zipped and populate the metadata
         for topic_data in topics_zipped:
             topic_key = get_key_by_value(record_config["topics"],topic_data[0])
-            # Create a key like 'topic1', 'topic2', etc.
+
+            # get info per topic
             self.metadata['topics'][topic_key] = dict(zip(keys, topic_data))
             self.topics_to_keys[topic_data[0]] = topic_key
 
@@ -175,7 +176,7 @@ class BadReader:
         self._process_data(sync_rate=self.sync_rate,
                         pre_truncated=config.get("pre_truncated"),
                         post_truncated=config.get("post_truncated"))
-        
+
         self.metadata['num_of_synced_msgs'] = len(self.aligned_data['dt'])
         self.metadata['demonstrator'] = record_config['recording']['demonstrator']
 
@@ -261,33 +262,34 @@ class BadReader:
             topic_key = self.topics_to_keys[topic]
             # raw_data{topic_key} = function
 
-            if (topic_key in self.aligned_data["topics"].keys()): ## change!!! 
+            if (topic_key in self.aligned_data["topics"].keys()): ## change to all topics!!! 
                 self.raw_data[topic_key]['time'].append(t.to_sec())
                 data = self.get_raw_element(topic=topic_key,
                                     msg=msg)
                 self.raw_data[topic_key]['data'].append(data)
 
-            # aligned data
-            if ((t.to_sec() - currtime) >= 1.0 / sync_rate):
-                
-                if((currtime > starttime + pre_truncated) and (currtime < end_time - post_truncated)    \
-                    and (t.to_sec() > starttime + pre_truncated) and (t.to_sec() < end_time - post_truncated)):
-
-                    for tk in self.aligned_data['topics'].keys():
-                        data_aligned = self.raw_data[tk]['data'][-1]
-                        data_aligned = self.get_aligned_element(topic=tk,
-                                                        data=data_aligned)
-
-                        self.aligned_data['topics'][tk].append(data_aligned)
+                # aligned data
+            if (topic_key in self.aligned_data["topics"].keys()): ## here just the aligned
+                if ((t.to_sec() - currtime) >= 1.0 / sync_rate):
                     
-                currtime = t.to_sec()
-                if len(self.aligned_data['time_elapsed']) > 0:
-                    prevtime = self.aligned_data['time_elapsed'][-1]
-                    self.aligned_data['dt'].append(currtime-prevtime)
-                else:
-                    self.aligned_data['dt'].append(0)
+                    if((currtime > starttime + pre_truncated) and (currtime < end_time - post_truncated)    \
+                        and (t.to_sec() > starttime + pre_truncated) and (t.to_sec() < end_time - post_truncated)):
 
-                self.aligned_data['time_elapsed'].append(currtime - starttime)
+                        for tk in self.aligned_data['topics'].keys():
+                            data_aligned = self.raw_data[tk]['data'][-1]
+                            data_aligned = self.get_aligned_element(topic=tk,
+                                                            data=data_aligned)
+
+                            self.aligned_data['topics'][tk].append(data_aligned)
+
+                    currtime = t.to_sec()
+                    if len(self.aligned_data['time_elapsed']) > 0:
+                        prevtime = self.aligned_data['time_elapsed'][-1]
+                        self.aligned_data['dt'].append(currtime-prevtime)
+                    else:
+                        self.aligned_data['dt'].append(0)
+
+                    self.aligned_data['time_elapsed'].append(currtime - starttime)
             
         # def init_aligned_dic(self,dic,tk):
     #     if(tk == 'odom'):
@@ -320,11 +322,13 @@ class BadReader:
         Returns:
             Varies: The processed data element, the type depends on the topic.
         """
+        
         switcher = {
             # "depth": image_compressed_to_numpy,
             "depth": image_to_numpy,
             "rgb": image_to_numpy,
-            "odom": odom_to_numpy
+            "odom": odom_to_numpy,
+            "target_object": object_detection_to_dic
         }
 
         case_function = switcher.get(topic)
@@ -344,7 +348,8 @@ class BadReader:
         switcher = {
             "depth": lambda x: x,
             "rgb": lambda x: x,
-            "odom": np_odom_to_xy_yaw
+            "odom": np_odom_to_xy_yaw,
+            "target_object": lambda x:x
         }
 
         case_function = switcher.get(topic)
@@ -394,8 +399,8 @@ class BadReader:
         if not os.path.exists(folder_path):
             os.mkdir(folder_path)
             for tk,v in data.items():
-                file_path = os.path.join(folder_path,f'raw_{tk}.h5')
-                
+                file_path = os.path.join(folder_path,f'{tk}_raw.h5')
+
                 # Create a HDF5 file
                 with h5py.File(file_path, 'w') as h5file:
                     # Store the time
@@ -403,19 +408,46 @@ class BadReader:
                     
                     # Store the data depend on the topic
                     if tk == 'odom':
-                        pos = np.array([vi[0] for vi in v['data']])
-                        ori = np.array([vi[1] for vi in v['data']])
-                        lin_vel = np.array([vi[2] for vi in v['data']])
-                        ang_vel = np.array([vi[3] for vi in v['data']])
                         
-                        h5file.create_dataset('pose', data=pos)
-                        h5file.create_dataset('ori', data=ori)
-                        h5file.create_dataset('lin_vel', data=lin_vel)
-                        h5file.create_dataset('ang_vel', data=ang_vel)
+                        data_arrays = {}
+                        num_keys = len(v['data'][0])  # Assuming all data entries have the same number of elements
+                        
+                        # Initialize arrays for each key with the correct length
+                        # indexes correspond to : ["position","orientation","linear_vel","angular_vel"]
+                        for i in range(num_keys):
+                            data_arrays[i] = []
 
-                    elif tk in ['rgb']: ## change to depth
+                        # Process each entry in v['data'] only once
+                        for data_entry in v['data']:
+                            for i in range(num_keys):
+                                data_arrays[i].append(data_entry[i])
+
+                        # Create datasets for each key
+                        for i in range(num_keys):
+                            h5file.create_dataset(f'data_{i}', data=np.array(data_arrays[i]))
+
+                    elif tk in ['rgb', 'depth']: ## change to depth
                         h5file.create_dataset('data', data=np.array(v['data']))
-                
+
+                    elif tk == "target_object":
+                        data_arrays = {}
+                        keys = list(v['data'][0].keys())  # Assuming all data entries have the same number of elements
+                        
+                        # Initialize arrays for each key with the correct length
+                        # indexes correspond to : ["position","orientation","linear_vel","angular_vel"]
+                        for key in keys:
+                            data_arrays[key] = []
+
+                        # Process each entry in v['data'] only once
+                        for data_entry in v['data']:
+                            for key in keys:
+                                data_arrays[key].append(data_entry[key])
+
+                        # Create datasets for each key
+                        for key in keys:
+                            h5file.create_dataset(f'data_{key}', data = data_arrays[key] if type(data_arrays[key][0]==str) else np.array(data_arrays[key]) )
+
+                h5file.close()
                 print(f"[INFO]  {tk} raw data successfully saved.")
 
     def save_aligned(self, data:dict):
@@ -431,26 +463,40 @@ class BadReader:
         for tk in data['topics'].keys():
             if tk == 'odom':
                 
-                filename = 'traj_data'
+                filename = 'traj_robot_data'
                 file_path = os.path.join(self.dst_datafolder,filename+'.json')
                 
                 dic_to_save = {}
                 for frame in ['gt_frame','odom_frame','relative_frame']:
                     dic_to_save.update({frame:{'position':[],'yaw':[]}})
                     for type in ['position','yaw']:
-                        for i in range(len(data['topics']['odom'])):
+                        for i in range(len(data['topics'][tk])):
                             dic_to_save[frame][type].append(data['topics']['odom'][i][frame][type])
-                
+
                 with open(file_path, 'w') as file:
                     json.dump(dic_to_save, file, indent=4)
 
+            if tk == 'target_object':
+                
+                filename = 'traj_target_data'
+                file_path = os.path.join(self.dst_datafolder,filename+'.json')
+                
+                with open(file_path, 'w') as file:
+                    json.dump(data['topics'][tk], file, indent=4)
+
             elif tk in ['rgb','depth']:
-                folder_path = os.path.join(self.dst_datafolder,'visual_data')
-                if not os.path.exists(folder_path):
-                    os.mkdir(folder_path)
-                    for i, img in enumerate(self.aligned_data['topics'][tk]):
-                        img_name =  os.path.join(folder_path,f'{i}.jpg')
-                        cv2.imwrite(img_name, img)
+                
+                parent_folder_path = os.path.join(self.dst_datafolder,'visual_data')
+                if not os.path.exists(parent_folder_path):
+                    os.mkdir(parent_folder_path)
+                
+                child_folder_path = os.path.join(parent_folder_path,tk)
+                if not os.path.exists(child_folder_path):
+                    os.mkdir(child_folder_path)
+                
+                for i, img in enumerate(self.aligned_data['topics'][tk]):
+                    img_name =  os.path.join(child_folder_path,f'{i}.jpg')
+                    cv2.imwrite(img_name, img)
 
             print(f"[INFO]  {tk} data successfully saved.")
 
@@ -472,8 +518,11 @@ class BadReader:
         
         yaws = np.array([item['odom_frame']['yaw'] for item in odom_traj])
         times = np.array(data['time_elapsed'])
-        for tk in data['topics'].keys(): image_tk = tk if tk != 'odom' else None
 
+        ##### TODO: handling with rgb and depth or just one of them #######
+        #for tk in data['topics'].keys(): image_tk = tk if tk != 'odom' else None
+
+        image_tk = "rgb"
         images = np.array(data['topics'][image_tk])
 
         fig = plt.figure(figsize=[16, 12])
@@ -544,7 +593,7 @@ class BagProcess:
             save_raw (bool, optional): Flag to save raw data from the bag files. Defaults to False.
             save_video (bool, optional): Flag to save trajectory videos from the bag files. Defaults to True.
         """
-        
+
         print(f"[INFO] processing batch - {bag_folder_path}")
 
         metadata_file_p = os.path.join(bag_folder_path,"metadata.json")
@@ -579,8 +628,8 @@ class BagProcess:
 
                     bag_reader.save_aligned(aligned_data)
                     
-                    save_raw = save_raw
-                    if save_raw:
+                    is_save_raw = save_raw
+                    if is_save_raw:
                         bag_reader.save_raw(raw_data)
                     
                     save_video = save_video if config is None else config.get("save_vid", True)
@@ -620,9 +669,7 @@ class BagProcess:
             config (dict, optional): Configuration dictionary containing necessary arguments. Defaults to None.
 
         """
-        
         print(f"[INFO] processing folder - {folder_path}")
-
 
         # Ensure that either config is provided or the other arguments, but not both
         assert (config is None) != (folder_path is None), "Either provide a config dictionary or the individual arguments, but not both"
