@@ -39,7 +39,6 @@ class BadReader:
 
     Attributes:
         bagfile (str): Path to the ROS bag file.
-        cv_bridge (CvBridge): A CvBridge object for image conversion.
         filename (str): Name of the bag file.
         dir (str): Directory of the bag file.
         dst_datafolder (str): Destination folder for processed data.
@@ -83,7 +82,6 @@ class BadReader:
         print(f"\n[INFO]  Reading {bagfile}.")
 
         self.bagfile = bagfile
-        self.cv_bridge = CvBridge()
 
         parts = bagfile.split('/')
         
@@ -276,9 +274,9 @@ class BadReader:
                         and (t.to_sec() > starttime + pre_truncated) and (t.to_sec() < end_time - post_truncated)):
 
                         for tk in self.aligned_data['topics'].keys():
-                            data_aligned = self.raw_data[tk]['data'][-1]
+                            data_entry = self.raw_data[tk]['data'][-1]
                             data_aligned = self.get_aligned_element(topic=tk,
-                                                            data=data_aligned)
+                                                            data=data_entry)
 
                             self.aligned_data['topics'][tk].append(data_aligned)
 
@@ -290,7 +288,7 @@ class BadReader:
                         self.aligned_data['dt'].append(0)
 
                     self.aligned_data['time_elapsed'].append(currtime - starttime)
-            
+
         # def init_aligned_dic(self,dic,tk):
     #     if(tk == 'odom'):
     #         dic = {tk:{}}
@@ -360,7 +358,7 @@ class BadReader:
             if prev_data is None:
                 x_start, y_start, yaw_start = data[0][0], data[0][1], quat_to_yaw(data[1])
                 self.A = get_transform_to_start(x_start, y_start, yaw_start)
-            
+
             return case_function(data, prev_data, self.A)
         else:
             return case_function(data)
@@ -430,22 +428,23 @@ class BadReader:
                         h5file.create_dataset('data', data=np.array(v['data']))
 
                     elif tk == "target_object":
-                        data_arrays = {}
-                        keys = list(v['data'][0].keys())  # Assuming all data entries have the same number of elements
-                        
-                        # Initialize arrays for each key with the correct length
-                        # indexes correspond to : ["position","orientation","linear_vel","angular_vel"]
-                        for key in keys:
-                            data_arrays[key] = []
-
-                        # Process each entry in v['data'] only once
-                        for data_entry in v['data']:
+                        if len(v['data'])>0:
+                            data_arrays = {}
+                            keys = list(v['data'][0].keys())  # Assuming all data entries have the same number of elements
+                            
+                            # Initialize arrays for each key with the correct length
+                            # indexes correspond to : ["position","orientation","linear_vel","angular_vel"]
                             for key in keys:
-                                data_arrays[key].append(data_entry[key])
+                                data_arrays[key] = []
 
-                        # Create datasets for each key
-                        for key in keys:
-                            h5file.create_dataset(f'data_{key}', data = data_arrays[key] if type(data_arrays[key][0]==str) else np.array(data_arrays[key]) )
+                            # Process each entry in v['data'] only once
+                            for data_entry in v['data']:
+                                for key in keys:
+                                    data_arrays[key].append(data_entry[key])
+
+                            # Create datasets for each key
+                            for key in keys:
+                                h5file.create_dataset(f'data_{key}', data = data_arrays[key] if type(data_arrays[key][0]==str) else np.array(data_arrays[key]) )
 
                 h5file.close()
                 print(f"[INFO]  {tk} raw data successfully saved.")
@@ -510,20 +509,50 @@ class BadReader:
             data (dict): The aligned data used for creating the trajectory video.
             rate (int): The rate at which frames are sampled from the data. Defaults to 10.
         """
-        
-        # Extracting position and yaw values into separate numpy arrays
 
-        odom_traj = data['topics']['odom']
-        positions = np.array([item['odom_frame']['position'] for item in odom_traj])
-        
-        yaws = np.array([item['odom_frame']['yaw'] for item in odom_traj])
+        keys = data['topics'].keys()
+
+        images = None
         times = np.array(data['time_elapsed'])
+        
+        for key in keys:
 
-        ##### TODO: handling with rgb and depth or just one of them #######
-        #for tk in data['topics'].keys(): image_tk = tk if tk != 'odom' else None
+            if key == 'odom':    
+                # Extracting position and yaw values into separate numpy arrays
+                odom_traj = data['topics'][key]
+                positions = np.array([item['odom_frame']['position'] for item in odom_traj])
+                
+                yaws = np.array([item['odom_frame']['yaw'] for item in odom_traj])
+                
+            if key == 'target_object':
+                target_in_cam = data['topics'][key]
+                target_positions = np.array([item.get('position') for item in target_in_cam])
+                target_bbox3d = np.array([item.get('bbox3d') for item in target_in_cam])
+                
+                # Take just the x-y coordinates of a box from top view 
+                target_bbox3d = target_bbox3d[:,:4,:2]
+            if key == "rgb":
+                
+                if images is not None:
+                    images = np.concatenate((images, data['topics'][key]), axis=1)
+                else:
+                    images = np.array(data['topics'][key])
 
-        image_tk = "rgb"
-        images = np.array(data['topics'][image_tk])
+            if key == "depth":
+                depth_images = np.array(data['topics'][key])
+                shape = depth_images.shape
+                depth_rgb_images = np.zeros((shape[0], shape[1], shape[2], 3), dtype=np.uint8)
+                
+                # Copy grayscale values into each color channel
+                depth_rgb_images[:,:,:,0] = depth_images  # Red channel
+                depth_rgb_images[:,:,:,1] = depth_images  # Green channel
+                depth_rgb_images[:,:,:,2] = depth_images  # Blue channel
+
+                if images is not None:
+                    images = np.concatenate((images, depth_rgb_images), axis=2)
+                else:
+                    images = depth_rgb_images
+
 
         fig = plt.figure(figsize=[16, 12])
         grid = plt.GridSpec(12, 17, hspace=0.2, wspace=0.2)
@@ -531,28 +560,51 @@ class BadReader:
         ax_image = fig.add_subplot(grid[1:6, :], title=f"Scene Image")
         ax_trajectory = fig.add_subplot(grid[7:, :], title="Trajectory", xlabel="Y [m]", ylabel="X [m]")
         
-        x_lim = np.max([abs(np.max(positions[:,1])),  abs(np.min(positions[:,1]))])
-        ax_trajectory.set_xlim(xmin=-x_lim-0.1,xmax=x_lim + 0.1)
-        ax_trajectory.invert_xaxis()
         
+        x_lim = np.max([abs(np.max(target_positions[:,1] + positions[:,1])),  abs(np.min(target_positions[:,1] + positions[:,1]) )])
+        ax_trajectory.set_xlim(xmin=-x_lim-0.5,xmax=x_lim + 0.5)
+        
+        y_lim = np.max([abs(np.max(target_positions[:,0] + positions[:,0])),  abs(np.min(target_positions[:,0] + positions[:,0]) )])
+        ax_trajectory.set_ylim(ymin=-y_lim-0.5,ymax=y_lim + 0.5)
+
+        ax_trajectory.invert_xaxis()
+        ax_trajectory.grid(True)
+
         aggregated_positions = []
+        aggregated_target_positions = []
         Frames = []
         for i in range(len(images)):
             
             if i % rate == 0:
+                
                 aggregated_positions.append(positions[i])
-                frame = TrajViz.visualization(location = np.array(aggregated_positions),
+                
+                corners = None
+                if((target_positions[i]!=np.zeros_like(target_positions[i])).all()):
+
+                    
+                    aggregated_target_positions.append(np.array([[np.cos(yaws[i]), 0],[0, np.sin(yaws[i])]]) @ positions[i].T + target_positions[i][:2])
+                    # aggregated_target_positions.append(target_positions[i][:2]+positions[i])
+                    
+                    
+                    # corners = target_bbox3d[i] + positions[i]
+                    corners = np.array([[np.cos(yaws[i]), 0],[0, np.sin(yaws[i])]]) @ positions[i].T + target_bbox3d[i] 
+
+                frame = TrajViz.visualization(robot_position = np.array(aggregated_positions),
                                 yaw=yaws[i],
                                 curr_image=images[i],
                                 time=times[i],
                                 frame_idx = i,
                                 ax_image=ax_image,
-                                ax_trajectory=ax_trajectory)# ,
-                                # ax_title = ax_title)
+                                ax_trajectory=ax_trajectory,
+                                target_position=np.array(aggregated_target_positions),
+                                corners = corners)
+
                 Frames.append(frame)
-        
+
         ani = animation.ArtistAnimation(fig=fig,
                                         artists=Frames,
+                                        blit=True,
                                         interval=200)
 
         TrajViz.save_animation(ani=ani,dest_dir=self.dst_datafolder,file_name="traj_sample")

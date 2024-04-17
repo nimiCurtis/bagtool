@@ -13,8 +13,9 @@
 # limitations under the License.
 
 # Standard library imports
-from typing import Any
 import os
+from dataclasses import dataclass, field
+from typing import Any, List
 
 # Third party library imports
 import numpy as np
@@ -24,6 +25,8 @@ import moviepy.video.io.VideoFileClip as mp
 from matplotlib import animation
 
 # ROS libraries
+from cv_bridge import CvBridge, CvBridgeError
+bridge = CvBridge()
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CompressedImage
 from zed_interfaces.msg import *
@@ -39,44 +42,92 @@ class TrajViz():
         pass
     
     @staticmethod
-    def visualization(location,
+    def visualization(robot_position,
                     yaw,
                     curr_image,
                     time,
                     frame_idx,
                     ax_image,
-                    ax_trajectory):
+                    ax_trajectory,
+                    target_position=None,
+                    corners = None):
 
+        # Frame=[]
+        
+        # ax_trajectory.legend(["Robot Location"],loc="upper right")
+        # # Swap red and blue channels
+        # curr_image_red_blue_swapped = curr_image[:, :, ::-1]
+        
+        # # plot_0=ax_image.imshow(curr_image)
+        # title = ax_image.text((curr_image.shape[1]-100),0, "", bbox={'facecolor':'w', 'alpha':0.7, 'pad':5},
+        #         fontsize=12,
+        #         ha="left",
+        #         va="top")
+        # title.set_text(f"Frame: {frame_idx} | Time: {time:.4f} [sec]")
+        
+        # Frame.append(title)
+        # Frame.append(ax_image.imshow(curr_image_red_blue_swapped))
+        # Frame.append(ax_trajectory.plot(robot_position[:,1],robot_position[:,0],
+        #                                 c="r",linewidth=2, markersize=8)[0])
+
+        # if(len(target_position)>0):
+        #     Frame.append(ax_trajectory.plot(target_position[:,1],target_position[:,0],
+        #                                     c="b",linewidth=2 , markersize=16)[0])
+
+        #     if corners is not None:
+                
+        #         # inverted axes
+        #         x = corners[:,1]
+        #         y = corners[:,0]
+        #         Frame.append(ax_trajectory.plot([x[0], x[1], x[2], x[3], x[0]],
+        #                                         [y[0], y[1], y[2], y[3], y[0]],
+        #                                         'b-', marker='o',linewidth=2, markersize=16)[0])
+        
         Frame=[]
         
-        ax_trajectory.legend([f"Location"],loc="upper right")
-        ax_trajectory.grid()
+        
         # Swap red and blue channels
         curr_image_red_blue_swapped = curr_image[:, :, ::-1]
-        plot_0=ax_image.imshow(curr_image_red_blue_swapped)
-        # plot_0=ax_image.imshow(curr_image)
-
-        Frame.append(plot_0)
-
-        plot_1,=ax_trajectory.plot(location[:,1],location[:,0],c="r")
-        Frame.append(plot_1)
         
-        # if location.shape[0]>2:
-        #     plot_2 = ax_trajectory.arrow(location[-1,1],location[-1,0],
-        #                             location[-1,1]+np.cos(yaw)*0.001,#(abs(location[-1,1]-location[-2,1])),
-        #                             location[-1,0]+np.sin(-yaw)*0.001,#(abs(location[-1,0]-location[-2,0])),
-        #                             head_width = 0.000005,
-        #                             head_length = 0.000005)
-        #     Frame.append(plot_2)
-
-
-        title = ax_image.text((curr_image.shape[1])+10,0, "", bbox={'facecolor':'w', 'alpha':0.7, 'pad':5},
+        # plot_0=ax_image.imshow(curr_image)
+        title = ax_image.text((curr_image.shape[1]-100),0, "", bbox={'facecolor':'w', 'alpha':0.7, 'pad':5},
                 fontsize=12,
                 ha="left",
                 va="top")
         title.set_text(f"Frame: {frame_idx} | Time: {time:.4f} [sec]")
-        Frame.append(title)
         
+
+        
+        Frame.append(title)
+        Frame.append(ax_image.imshow(curr_image_red_blue_swapped))
+        
+        
+        handles = []
+        robot_pos_plot = ax_trajectory.plot(robot_position[:,1],robot_position[:,0],
+                                        c="r",linewidth=4, markersize=8,
+                                        label = 'Robot position [m]')[0]
+        handles.append(robot_pos_plot)
+        Frame.append(robot_pos_plot)
+
+        if(len(target_position)>0):
+            target_pos_plot = ax_trajectory.plot(target_position[:,1],target_position[:,0],
+                                            c="b",linewidth=4 , markersize=16,
+                                            label = 'Target Object Position [m]')[0]
+            handles.append(target_pos_plot)
+            Frame.append(target_pos_plot)
+            if corners is not None:
+                
+                # inverted axes
+                x = corners[:,1]
+                y = corners[:,0]
+                target_box_plot = ax_trajectory.plot([x[0], x[1], x[2], x[3], x[0]],
+                                                [y[0], y[1], y[2], y[3], y[0]],
+                                                'b-', marker='o',linewidth=4, markersize=16)[0]
+                handles.append(target_box_plot)
+                Frame.append(target_box_plot)
+                
+        ax_trajectory.legend(handles = handles)
+
         return Frame
 
     @staticmethod
@@ -106,6 +157,22 @@ class TrajViz():
         clip.write_videofile(mp4_file_path)
         os.remove(gif_file_path)
         print("[INFO]  Animation saved")
+
+
+
+@dataclass
+class ObjDet:
+    label: str = "None"
+    label_id: int = -1
+    instance_id: int = -1
+    confidence: float = -1.0
+    tracking_state: int = -1
+    tracking_available: bool = False
+    position: List[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    position_covariance: List[float] = field(default_factory=lambda: [0.0]*6)
+    velocity: List[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    bbox3d: List[List[float]] = field(default_factory=lambda: [[0.0, 0.0, 0.0]]*8)
+    bbox2d: List[List[float]] = field(default_factory=lambda: [[0.0, 0.0]]*4)
 
 
 def get_key_by_value(my_dict, value):
@@ -261,46 +328,37 @@ def normalize_angles_array(angles):
 ## msg structure:
 ## https://github.com/stereolabs/zed-ros-interfaces/tree/main/msg
 def object_detection_to_dic(msg: ObjectsStamped):
-    
+
+    obj = ObjDet()
+
     # check there is detection
     if len(msg.objects)>0 :
-        
-        obj = Object()
-        obj = msg.objects[0]
-        
-        instance_id = obj.instance_id
-        label = obj.label
-        label_id = obj.label_id
-        confidence = obj.confidence
-        tracking_state = obj.tracking_state
-        tacking_available = obj.tracking_available
+        obj_ros = msg.objects[0]
 
-        position = list(obj.position)
-        position_covariance = list(obj.position_covariance)
-        velocity = list(obj.velocity)
-        
-        bbox3d = bbox3d_to_list(obj.bounding_box_3d)
-        bbox2d = bbox2d_to_list(obj.bounding_box_2d)
-    
+        obj.label = obj_ros.label
+        obj.label_id = obj_ros.label_id
+        obj.instance_id = obj_ros.instance_id
+        obj.confidence = obj_ros.confidence
+        obj.tracking_state = obj_ros.tracking_state
+        obj.tracking_available = obj_ros.tracking_available
+        obj.position = list(obj_ros.position)
+        obj.position_covariance = list(obj_ros.position_covariance)
+        obj.velocity = list(obj_ros.velocity)
+        obj.bbox3d = bbox_to_list(obj_ros.bounding_box_3d)
+        obj.bbox2d = bbox_to_list(obj_ros.bounding_box_2d)
+
     return {
-        "label": label, "label_id": label_id, "instance_id": instance_id,
-        "confidence": confidence, "tracking_state": tracking_state,"tacking_available": tacking_available,
-        "position": position, "position_covariance": position_covariance, "velocity": velocity, 
-        "bbox3d": bbox3d,"bbox2d": bbox2d           
+        "label": obj.label, "label_id": obj.label_id, "instance_id": obj.instance_id,
+        "confidence": obj.confidence, "tracking_state": obj.tracking_state,"tracking_available": obj.tracking_available,
+        "position": obj.position, "position_covariance": obj.position_covariance, "velocity": obj.velocity, 
+        "bbox3d": obj.bbox3d,"bbox2d": obj.bbox2d           
     }
 
-def bbox3d_to_list(msg: BoundingBox3D):
+def bbox_to_list(msg):
     corners = []
     for corner in msg.corners:
-        corners.append(corner.kp)
+        corners.append(list(corner.kp))
     return corners
-
-def bbox2d_to_list(msg: BoundingBox2Di):
-    corners = []
-    for corner in msg.corners:
-        corners.append(corner.kp)
-    return corners
-
 
 def image_compressed_to_numpy(msg:CompressedImage)->np.ndarray:
     """
@@ -320,7 +378,7 @@ def image_compressed_to_numpy(msg:CompressedImage)->np.ndarray:
     return np_img
 
 def image_to_numpy(
-    msg, empty_value=None, output_resolution=None
+    msg, empty_value=None, output_resolution=None,max_depth=5000, use_bridge=False
 ):
     """
     Converts a ROS image message to a numpy array, with options for data manipulation.
@@ -342,19 +400,42 @@ def image_to_numpy(
     is_rgb = "8" in msg.encoding
     is_depth16 = "16" in msg.encoding
     is_depth32 = "32" in msg.encoding
+    
+    
     # Convert the image data to the appropriate format
-    if is_rgb:
-        nchannels=3
-        data = np.frombuffer(msg.data, dtype=np.uint8).copy()
-        data = data.reshape(msg.height, msg.width, 4)[:,:,:nchannels]
-    elif is_depth16:
-        data = np.frombuffer(msg.data, dtype=np.uint16).copy()
-        data = data.reshape(msg.height, msg.width)
-    elif is_depth32:
-        data = np.frombuffer(msg.data, dtype=np.float32).copy()
-        data = data.reshape(msg.height, msg.width)
+    if not use_bridge:
+        
+        if is_rgb:
+            nchannels=3
+            data = np.frombuffer(msg.data, dtype=np.uint8).copy()
+            data = data.reshape(msg.height, msg.width, 4)[:,:,:nchannels]
+        elif is_depth16:
+            data = np.frombuffer(msg.data, dtype=np.uint16).copy()
+            data = data.reshape(msg.height, msg.width)
+            
+            if max_depth:
+                data = 1 - (np.clip(data, a_min=0, a_max=max_depth) / max_depth)
+                data = np.array(255*data.astype(np.float32),dtype=np.uint8)
+        
+        elif is_depth32: ## currently not good decoding 
+            data = np.frombuffer(msg.data, dtype=np.float32).copy()
+            data = data.reshape(msg.height, msg.width)
+    else:
+        # convert image msgs to opencv format
+            try:
+                cv_img = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough") # "passthrough" = keep the same encoding format of the image
+                if is_depth16:
+                    if max_depth:
+                        data = 1 - (np.clip(data, a_min=0, a_max=max_depth) / max_depth)
+                        data = np.array(255*data.astype(np.float32),dtype=np.uint8)
+                    else:
+                        data = np.array(256*data.astype(np.float32)/0x0fff,dtype=np.uint8)
 
-    # Reshape the data array according to image dimensions and number of channels
+                if is_rgb:
+                    data = np.array(cv_img[:,:,:3], dtype=np.int32)
+            except CvBridgeError as e:
+                print(e)
+
     # Replace empty values if specified
     if empty_value:
         mask = np.isclose(abs(data), empty_value)
@@ -363,7 +444,7 @@ def image_to_numpy(
     
     fill_value = np.percentile(data[~mask], 99)
     data[mask] = fill_value
-    
+
     # Resize the image to the desired output resolution
     data = cv2.resize(
         data,
@@ -371,9 +452,6 @@ def image_to_numpy(
         interpolation=cv2.INTER_AREA,
     )
 
-    # Normalize the data if it is RGB
-    if is_depth16:
-        data = np.array(256*data.astype(np.float32)/0x0fff,dtype=np.uint8)
 
     # Create a mask to filter out NaN and Inf values
     # valid_mask = np.isfinite(depth_image)
