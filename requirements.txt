@@ -1,6 +1,7 @@
+matplotlib
 numpy
-opencv
+opencv-python
 tqdm
 moviepy
 h5py
-matplotlib
+

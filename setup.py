@@ -14,8 +14,8 @@ setup(
         # 'numpy',
         # 'pandas',
     ],
-    author='Your Name',
-    author_email='your.email@example.com',
+    author='Nimrod Curtis',
+    author_email='nimicu21@gmail.com',
     description='A simple bagtool command line tool',
     license='MIT',
 )

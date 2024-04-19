@@ -47,7 +47,6 @@ class BagCompress:
                 sys.exit("Exiting program.")
         except FileNotFoundError as e:
             print(e)
-        
 
         # If the file exists, read and return its contents
         with open(metadata_file_p, 'r') as file:
@@ -62,7 +61,7 @@ class BagCompress:
                     original_file_name = filename.rsplit('.')[0] + ".orig.bag"
                     os.remove(os.path.join(bag_folder_path, original_file_name))
                 
-                    # add to metadata
+                    # Add to metadata
                     metadata["compressed_bags"].append(filename)
                 else:
                     print(f"[INFO] {filename} already compressed")
