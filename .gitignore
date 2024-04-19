@@ -4,4 +4,6 @@ bagtool.egg-info
 .vscode
 dataset
 
+bag/
 *.bag
+

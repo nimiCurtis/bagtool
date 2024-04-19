@@ -20,10 +20,12 @@ from bagtool.process.process import BagProcess as bp
 
 def main():
     
+    # Set the config path
     config_path = 'process_bag_config.yaml'
     with open(config_path, 'r') as file:
             process_config = yaml.safe_load(file)
     
+    # Process based on the config
     bp.process_folder(config=process_config)
 
 if __name__ == "__main__":

@@ -62,7 +62,7 @@ The main tool of this package is the process tool, which process ROS bag files f
                             path to a bag folder consisting bag batches
     -d DST, --dst DST     path to a dataset destination folder
     -n NAME, --name NAME  a custom name for the datafolder
-    --no_raw              not saving raw data
+    --no_raw              disable raw data saveing
 
 
 - And From a custom script using the bagtool.process module 
@@ -84,7 +84,7 @@ dest = '<some_path>/dataset'
 bp.process_folder(source,dest)
 ```
 
-**Using custom script + .yaml config:**
+**(Recomended) Using custom script + .yaml config:**
 
 We can a extract the dataset from a recordings database using custom config file.
 
@@ -96,7 +96,7 @@ destination_folder: "/home/roblab20/dev/bagtool/dataset"
 save_raw: true                        # I dont see a reason why to set it to false
 
 demonstrator_name:                    # demonstrator/robot name
-  aligned_topics: ["odom", "rgb"]     # pick topics to be aligned
+  aligned_topics: ["odom", "rgb", "depth", <topic key name>]     # pick topics to be aligned
   sync_rate: 20                       # alignment rate, if null we will 
                                       # use the min frequency, from the aligned topics frequency
   save_vid: true                      # saving video
@@ -135,11 +135,16 @@ The resulted dataset from the example above will be as follow:
 │   │       ├── ...
 │   │       └── raw_<topicN>.h5
 |   |    ├── visual_data
-│   │       ├── 0.jpg
-│   │       ├── ...
-│   │       └── T.jpg
+|   |       ├── depth            
+│   │           ├── 0.jpg
+│   │           ├── ...
+│   │           └── T.jpg
+|   |       └── rgb          
+│   │           ├── ...
+│   │           └── T.jpg
 │   │    ├── metadata.json
-│   │    ├── traj_data.json
+│   │    ├── robot_traj_data.json
+│   │    ├── target_traj_data.json (when using the object detection topic)
 │   │    └── traj_sample.mp4
 │   ...
 └── └── <name_of_bag_batchN>
@@ -148,11 +153,16 @@ The resulted dataset from the example above will be as follow:
             ├── ...
             └── raw_<topicN>.h5
          ├── visual_data
-            ├── 0.jpg
-            ├── ...
-            └── T.jpg
+             ├── depth            
+                 ├── 0.jpg
+                 ├── ...
+                 └── T.jpg
+             └── rgb          
+                 ├── ...
+                 └── T.jpg
          ├── metadata.json
-         ├── traj_data.json
+         ├── robot_traj_data.json
+         ├── target_traj_data.json (when using the object detection topic)
          └── traj_sample.mp4
 ```  
 
@@ -160,14 +170,7 @@ The resulted dataset from the example above will be as follow:
 
 ### TODO: 
 By priority Top-Down:
-
-- [x] Check ros-to-numpy images encoding decoding include depth images.
-- [x] Check using the regular Image sensor msgs
-- [x] Process based on params.yaml file
-- [ ] Clean the main code in process.py
-- [ ] Syncing more then two topics?
-- [ ] Support more topics types -> when we start working on different robots
+- [ ] Improve efficiency and modularity
+- [ ] Handling with 32bit depth images ? 
+- [ ] Check use of the compressed Image sensor msgs
 - [ ] Add arrow to the traj animation indicating the yaw direction ?
-- [ ] Add deltas of positions and yaw to the traj_data.json ? 
-- [ ] handling with 32bit depth images ? 
-- [ ] Check using the compressed Image sensor msgs
