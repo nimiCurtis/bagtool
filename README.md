@@ -1,4 +1,4 @@
-# bagtool: Useful ROS Bag Management for Dataset Collection
+# bagtool: ROS Bag Management for Dataset Collection
 
 --- 
 
@@ -14,6 +14,8 @@ TBD...
 
 - [Ubuntu 20.04 (Focal Fossa)](https://releases.ubuntu.com/focal/)
 - [ROS Noetic](https://wiki.ros.org/noetic/Installation/Ubuntu)
+- [zed-ros-wrapper (v4.1.0 release or newer)](https://github.com/stereolabs/zed-ros-wrapper) 
+
 
 ### Build the package
 
@@ -39,6 +41,7 @@ $ pip install -e .
 ## Usage
 
 **Important: This package is designed to work with bag files structured in accordance with the recording conventions established by the [zion_zed_ros_interface](https://github.com/nimiCurtis/zion_zed_ros_interface). Please ensure compatibility with this structure for optimal performance. for more info on the structure use the given link**
+
 
 ### Main Tool - Process
 
@@ -165,6 +168,23 @@ The resulted dataset from the example above will be as follow:
          ├── target_traj_data.json (when using the object detection topic)
          └── traj_sample.mp4
 ```  
+
+### Secondary Tool - Compress
+Another tool provided is a quick & simple command line interface for rosbag compressing of entire batches of bags and folder of batches.
+
+
+- (Recomended) From the CLI : 
+
+<!-- #### Using from the command-line -->
+    usage: bagtool compress [-h] [-b BATCH] [-f FOLDER]
+
+    optional arguments:
+    -h, --help            show this help message and exit
+    -b BATCH, --batch BATCH
+                            path to a bag batch folder
+    -f FOLDER, --folder FOLDER
+                            path to a bag folder consisting bag batches
+
 
 ---
 
