@@ -675,7 +675,8 @@ class BagProcess:
                     print(f"[INFO] Bag {filename} already processed")
                 
                 print("------")
-            
+                
+                bag_i = bag_i + 1
 
         # Writing the updated data back to the file
         with open(metadata_file_p, 'w') as file:
@@ -744,6 +745,7 @@ class BagProcess:
                                         config=config.get(demonstrator)) ## why I did it like this ????????
                 print("[INFO] ---------- Finish Batch Processing ----------\n")
 
+                batch_i = batch_i + 1
         print("[INFO] ---------- Finish Folder Processing -----------")
 
 
