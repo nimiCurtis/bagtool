@@ -185,14 +185,61 @@ class BadReader:
         self._process_data(sync_rate=self.sync_rate,
                         pre_truncated=config.get("pre_truncated"),
                         post_truncated=config.get("post_truncated"))
-        self.metadata['num_of_synced_msgs'] = len(self.aligned_data['dt'])
         
+        # Calculate statistics
+        
+        statistics = self._stats_calc(aligned_data=self.aligned_data, frame_rate=self.sync_rate)
+        
+        self.metadata['num_of_synced_msgs'] = len(self.aligned_data['dt'])
+        self.metadata['time'] = self.aligned_data['time_elapsed'][-1]
+        self.metadata['stats'] = statistics
 
         print(f"[INFO]  Saving metadata.")
         with open(metadata_file_p, 'w') as file:
             json.dump(self.metadata, file, indent=4)
 
+    #TODO: move this out
+    def _stats_calc(self, aligned_data, frame_rate):
+        
+        data = aligned_data
+        dpos_arr = np.array([data["topics"]["odom"][i]['relative_frame']['position'] for i in range(len(data["topics"]["odom"]))])
+        dyaw_arr = np.array([data["topics"]["odom"][i]['relative_frame']['yaw'] for i in range(len(data["topics"]["odom"]))])
 
+        dpos_max = np.max(dpos_arr, axis=0)*frame_rate
+        dpos_min = np.min(dpos_arr, axis=0)*frame_rate
+        dpos_mean = np.mean(dpos_arr, axis=0)*frame_rate
+        dpos_std = np.std(dpos_arr, axis=0)*frame_rate
+        
+        dyaw_max = np.max(dyaw_arr)
+        dyaw_min = np.min(dyaw_arr)
+        dyaw_mean = np.mean(dyaw_arr)
+        dyaw_std = np.std(dyaw_arr)  
+
+        statistics = {
+            'dx': {
+                'max': dpos_max[0],
+                'min': dpos_min[0],
+                'mean': dpos_mean[0],
+                'std': dpos_std[0]
+            },
+            'dy': {
+                'max': dpos_max[1],
+                'min': dpos_min[1],
+                'mean': dpos_mean[1],
+                'std': dpos_std[1]
+            },
+            'dyaw': {
+                'max': dyaw_max,
+                'min': dyaw_min,
+                'mean': dyaw_mean,
+                'std': dyaw_std
+            }
+        }
+        
+        return statistics
+        
+        
+        
     def _init_raw_data(self):
         """
         Initialize the structure for storing raw data extracted from the bag file.
@@ -627,11 +674,12 @@ class BagProcess:
         print(f"[INFO] Batch - {bag_folder_path}")
 
         metadata_file_p = os.path.join(bag_folder_path,"metadata.json")
-
+        
         try:
             if not os.path.exists(metadata_file_p):
                 print(f"'metadata.json' not found in {bag_folder_path}.")
                 sys.exit("Exiting program.")
+            
         except FileNotFoundError as e:
             print(e)
 
@@ -705,7 +753,7 @@ class BagProcess:
             config (dict, optional): Configuration dictionary containing necessary arguments. Defaults to None.
 
         """
-        print(f"[INFO] Processing folder - {folder_path}")
+        
 
         # Ensure that either config is provided or the other arguments, but not both
         assert (config is None) != (folder_path is None), "Either provide a config dictionary or the individual arguments, but not both"
@@ -716,6 +764,8 @@ class BagProcess:
             dst_dataset = config.get('destination_folder')
             save_raw = config.get('save_raw', True)  # Default to False if not in config
 
+        print(f"[INFO] Processing folder - {folder_path}")
+        
         # Loop through each folder
         batches = [batch for batch in os.listdir(folder_path)]
         n_batches = len(batches)
