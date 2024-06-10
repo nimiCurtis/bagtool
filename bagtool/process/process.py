@@ -210,10 +210,10 @@ class BadReader:
         dpos_mean = np.mean(dpos_arr, axis=0)*frame_rate
         dpos_std = np.std(dpos_arr, axis=0)*frame_rate
         
-        dyaw_max = np.max(dyaw_arr)
-        dyaw_min = np.min(dyaw_arr)
-        dyaw_mean = np.mean(dyaw_arr)
-        dyaw_std = np.std(dyaw_arr)  
+        dyaw_max = np.max(dyaw_arr)*frame_rate
+        dyaw_min = np.min(dyaw_arr)*frame_rate
+        dyaw_mean = np.mean(dyaw_arr)*frame_rate
+        dyaw_std = np.std(dyaw_arr)*frame_rate
 
         statistics = {
             'dx': {
@@ -237,9 +237,8 @@ class BadReader:
         }
         
         return statistics
-        
-        
-        
+
+
     def _init_raw_data(self):
         """
         Initialize the structure for storing raw data extracted from the bag file.
