@@ -158,10 +158,13 @@ class BadReader:
         title=['Topic', 'Type', 'Message Count', 'Frequency']
         topics_zipped = list(zip(self.topics,message_types, n_messages, frequency))
 
-        # Set the sync rate
+        # Set the sync rate and max_depth
         self.sync_rate = config.get("sync_rate") if config is not None else self._get_sync_rate() 
-        self.metadata['sync_rate'] = self.sync_rate
+        self.max_depth = config.get("max_depth") if config is not None else 10000 # 10 [meter]
         
+        self.metadata['sync_rate'] = self.sync_rate
+        self.metadata['max_depth'] = self.max_depth
+
         # Initialize the 'topics' dictionary in metadata
         self.metadata['topics'] = {}
 
@@ -185,12 +188,58 @@ class BadReader:
         self._process_data(sync_rate=self.sync_rate,
                         pre_truncated=config.get("pre_truncated"),
                         post_truncated=config.get("post_truncated"))
-        self.metadata['num_of_synced_msgs'] = len(self.aligned_data['dt'])
+
+        # Calculate statistics
+
+        statistics = self._stats_calc(aligned_data=self.aligned_data, frame_rate=self.sync_rate)
         
+        self.metadata['num_of_synced_msgs'] = len(self.aligned_data['dt'])
+        self.metadata['time'] = self.aligned_data['time_elapsed'][-1]
+        self.metadata['stats'] = statistics
 
         print(f"[INFO]  Saving metadata.")
         with open(metadata_file_p, 'w') as file:
             json.dump(self.metadata, file, indent=4)
+
+    #TODO: move this out
+    def _stats_calc(self, aligned_data, frame_rate):
+        
+        data = aligned_data
+        dpos_arr = np.array([data["topics"]["odom"][i]['relative_frame']['position'] for i in range(len(data["topics"]["odom"]))])
+        dyaw_arr = np.array([data["topics"]["odom"][i]['relative_frame']['yaw'] for i in range(len(data["topics"]["odom"]))])
+
+        dpos_max = np.max(dpos_arr, axis=0)*frame_rate
+        dpos_min = np.min(dpos_arr, axis=0)*frame_rate
+        dpos_mean = np.mean(dpos_arr, axis=0)*frame_rate
+        dpos_std = np.std(dpos_arr, axis=0)*frame_rate
+        
+        dyaw_max = np.max(dyaw_arr)*frame_rate
+        dyaw_min = np.min(dyaw_arr)*frame_rate
+        dyaw_mean = np.mean(dyaw_arr)*frame_rate
+        dyaw_std = np.std(dyaw_arr)*frame_rate
+
+        statistics = {
+            'dx': {
+                'max': dpos_max[0],
+                'min': dpos_min[0],
+                'mean': dpos_mean[0],
+                'std': dpos_std[0]
+            },
+            'dy': {
+                'max': dpos_max[1],
+                'min': dpos_min[1],
+                'mean': dpos_mean[1],
+                'std': dpos_std[1]
+            },
+            'dyaw': {
+                'max': dyaw_max,
+                'min': dyaw_min,
+                'mean': dyaw_mean,
+                'std': dyaw_std
+            }
+        }
+        
+        return statistics
 
 
     def _init_raw_data(self):
@@ -328,7 +377,11 @@ class BadReader:
             "target_object": object_detection_to_dic
         }
 
-        case_function = switcher.get(topic)
+        if topic == "depth":
+            case_function = switcher.get(topic, self.max_depth)
+        else:
+            case_function = switcher.get(topic)
+
         return case_function(msg)
 
     def get_aligned_element(self,topic,data):
@@ -518,7 +571,8 @@ class BadReader:
         keys = data['topics'].keys()
         images = None
         times = np.array(data['time_elapsed'])
-
+        
+        
         for key in keys:
             if key == 'odom':
                 # Extract odometry data for positions and orientations
@@ -547,6 +601,9 @@ class BadReader:
                 depth_rgb_images[:, :, :, 2] = depth_images  # Blue channel
                 images = np.concatenate((images, depth_rgb_images), axis=2) if images is not None else depth_rgb_images
 
+        if "target_object" not in keys:
+            target_positions = np.zeros_like(positions)
+        
         # Setup figure and axes for the trajectory and image plots
         fig = plt.figure(figsize=[16, 12])
         grid = plt.GridSpec(12, 17, hspace=0.2, wspace=0.2)
@@ -558,6 +615,7 @@ class BadReader:
         ax_trajectory.set_xlim(xmin=-x_lim - 0.5, xmax=x_lim + 0.5)
         y_lim = np.max([abs(np.max(target_positions[:, 0] + positions[:, 0])), abs(np.min(target_positions[:, 0] + positions[:, 0]))])
         ax_trajectory.set_ylim(ymin=-y_lim - 0.5, ymax=y_lim + 0.5)
+        
         ax_trajectory.invert_xaxis()
         ax_trajectory.grid(True)
 
@@ -627,11 +685,12 @@ class BagProcess:
         print(f"[INFO] Batch - {bag_folder_path}")
 
         metadata_file_p = os.path.join(bag_folder_path,"metadata.json")
-
+        
         try:
             if not os.path.exists(metadata_file_p):
                 print(f"'metadata.json' not found in {bag_folder_path}.")
                 sys.exit("Exiting program.")
+            
         except FileNotFoundError as e:
             print(e)
 
@@ -675,7 +734,8 @@ class BagProcess:
                     print(f"[INFO] Bag {filename} already processed")
                 
                 print("------")
-            
+                
+                bag_i = bag_i + 1
 
         # Writing the updated data back to the file
         with open(metadata_file_p, 'w') as file:
@@ -704,7 +764,7 @@ class BagProcess:
             config (dict, optional): Configuration dictionary containing necessary arguments. Defaults to None.
 
         """
-        print(f"[INFO] Processing folder - {folder_path}")
+        
 
         # Ensure that either config is provided or the other arguments, but not both
         assert (config is None) != (folder_path is None), "Either provide a config dictionary or the individual arguments, but not both"
@@ -715,6 +775,8 @@ class BagProcess:
             dst_dataset = config.get('destination_folder')
             save_raw = config.get('save_raw', True)  # Default to False if not in config
 
+        print(f"[INFO] Processing folder - {folder_path}")
+        
         # Loop through each folder
         batches = [batch for batch in os.listdir(folder_path)]
         n_batches = len(batches)
@@ -744,6 +806,7 @@ class BagProcess:
                                         config=config.get(demonstrator)) ## why I did it like this ????????
                 print("[INFO] ---------- Finish Batch Processing ----------\n")
 
+                batch_i = batch_i + 1
         print("[INFO] ---------- Finish Folder Processing -----------")
 
 
