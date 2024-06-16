@@ -414,7 +414,7 @@ def quat_to_yaw(quat: np.ndarray) -> float:
     return yaw
 
 
-def image_to_numpy(msg, empty_value=None, output_resolution=None, max_depth=5000, use_bridge=False)->np.ndarray:
+def image_to_numpy(msg, empty_value=None, output_resolution=None, max_depth=10000, use_bridge=False)->np.ndarray:
     """
     Converts a ROS image message to a numpy array, applying format conversions, depth normalization, and resolution scaling.
 

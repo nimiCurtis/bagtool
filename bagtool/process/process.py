@@ -158,10 +158,13 @@ class BadReader:
         title=['Topic', 'Type', 'Message Count', 'Frequency']
         topics_zipped = list(zip(self.topics,message_types, n_messages, frequency))
 
-        # Set the sync rate
+        # Set the sync rate and max_depth
         self.sync_rate = config.get("sync_rate") if config is not None else self._get_sync_rate() 
-        self.metadata['sync_rate'] = self.sync_rate
+        self.max_depth = config.get("max_depth") if config is not None else 10000 # 10 [meter]
         
+        self.metadata['sync_rate'] = self.sync_rate
+        self.metadata['max_depth'] = self.max_depth
+
         # Initialize the 'topics' dictionary in metadata
         self.metadata['topics'] = {}
 
@@ -185,9 +188,9 @@ class BadReader:
         self._process_data(sync_rate=self.sync_rate,
                         pre_truncated=config.get("pre_truncated"),
                         post_truncated=config.get("post_truncated"))
-        
+
         # Calculate statistics
-        
+
         statistics = self._stats_calc(aligned_data=self.aligned_data, frame_rate=self.sync_rate)
         
         self.metadata['num_of_synced_msgs'] = len(self.aligned_data['dt'])
@@ -374,7 +377,11 @@ class BadReader:
             "target_object": object_detection_to_dic
         }
 
-        case_function = switcher.get(topic)
+        if topic == "depth":
+            case_function = switcher.get(topic, self.max_depth)
+        else:
+            case_function = switcher.get(topic)
+
         return case_function(msg)
 
     def get_aligned_element(self,topic,data):
@@ -564,7 +571,8 @@ class BadReader:
         keys = data['topics'].keys()
         images = None
         times = np.array(data['time_elapsed'])
-
+        
+        
         for key in keys:
             if key == 'odom':
                 # Extract odometry data for positions and orientations
@@ -593,6 +601,9 @@ class BadReader:
                 depth_rgb_images[:, :, :, 2] = depth_images  # Blue channel
                 images = np.concatenate((images, depth_rgb_images), axis=2) if images is not None else depth_rgb_images
 
+        if "target_object" not in keys:
+            target_positions = np.zeros_like(positions)
+        
         # Setup figure and axes for the trajectory and image plots
         fig = plt.figure(figsize=[16, 12])
         grid = plt.GridSpec(12, 17, hspace=0.2, wspace=0.2)
@@ -604,6 +615,7 @@ class BadReader:
         ax_trajectory.set_xlim(xmin=-x_lim - 0.5, xmax=x_lim + 0.5)
         y_lim = np.max([abs(np.max(target_positions[:, 0] + positions[:, 0])), abs(np.min(target_positions[:, 0] + positions[:, 0]))])
         ax_trajectory.set_ylim(ymin=-y_lim - 0.5, ymax=y_lim + 0.5)
+        
         ax_trajectory.invert_xaxis()
         ax_trajectory.grid(True)
 
