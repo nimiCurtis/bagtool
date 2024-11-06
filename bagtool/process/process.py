@@ -31,7 +31,6 @@ from cv_bridge import CvBridge
 
 # Custom libraries
 from bagtool.process.utils import *
-
 class BadReader:
     """
     A class to read and process data from a ROS bag file.
@@ -667,7 +666,8 @@ class BagProcess:
                     dst_datafolder_name: str = None,
                     save_raw: bool = False,
                     save_video: bool = True,
-                    config: dict = None):
+                    config: dict = None,
+                    force_process: bool = False):
         """
         Process a batch of ROS bag files located in a specified folder.
 
@@ -706,7 +706,7 @@ class BagProcess:
         # Loop through each file in the folder
         bag_i = 1
         for filename in filenames:
-                if not(filename in metadata["processed_bags"]):
+                if not(filename in metadata["processed_bags"]) or force_process:
                     # Compress the file using rosbag compress command
                     bagfile = os.path.join(bag_folder_path,filename)
                     
@@ -747,7 +747,8 @@ class BagProcess:
                     dst_dataset: str = None,
                     dst_datafolder_name: str = None,
                     save_raw: bool = False,
-                    config:dict = None
+                    config:dict = None,
+                    force_process: bool = False
                     ):
         
         """
@@ -774,7 +775,8 @@ class BagProcess:
             folder_path = config.get('bags_folder')
             dst_dataset = config.get('destination_folder')
             save_raw = config.get('save_raw', True)  # Default to False if not in config
-
+            force_process = config.get('force',False)
+            
         print(f"[INFO] Processing folder - {folder_path}")
         
         # Loop through each folder
@@ -803,12 +805,42 @@ class BagProcess:
                                         dst_dataset=dst_dataset,
                                         dst_datafolder_name = dst_datafolder_name,
                                         save_raw=save_raw,
-                                        config=config.get(demonstrator)) ## why I did it like this ????????
+                                        config=config.get(demonstrator),
+                                        force_process=force_process) ## why I did it like this ????????
                 print("[INFO] ---------- Finish Batch Processing ----------\n")
 
                 batch_i = batch_i + 1
         print("[INFO] ---------- Finish Folder Processing -----------")
 
+
+    @staticmethod
+    def reset_batch(bag_folder_path: str):
+        # Define the file name we're looking for
+        file_name = "metadata.json"
+        
+        # Construct the full file path
+        file_path = os.path.join(bag_folder_path, file_name)
+        
+        # Check if the file exists in the given folder
+        if os.path.isfile(file_path):
+            # If it exists, call the reset_processed_bags function
+            reset_processed_bags(file_path)
+        else:
+            print(f"{file_name} not found in {bag_folder_path}")
+
+    @staticmethod
+    def reset_folder(parent_folder_path: str):
+        # List all entries in the parent folder
+        for entry in os.listdir(parent_folder_path):
+            # Construct full path to the entry
+            entry_path = os.path.join(parent_folder_path, entry)
+            
+            # Check if the entry is a directory (folder)
+            if os.path.isdir(entry_path):
+                # Apply the process_metadata_in_folder function to the folder
+                BagProcess.reset_batch(entry_path)
+            else:
+                print(f"{entry_path} is not a folder, skipping...")
 
 def main():
 
