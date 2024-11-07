@@ -29,6 +29,7 @@ import moviepy.video.io.VideoFileClip as mp
 from cv_bridge import CvBridge, CvBridgeError
 bridge = CvBridge()
 from nav_msgs.msg import Odometry
+from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import CompressedImage
 from zed_interfaces.msg import *
 
@@ -55,7 +56,9 @@ class TrajViz():
                     ax_image,
                     ax_trajectory,
                     target_position=None,
-                    corners=None)->List[matplotlib.axes.Axes]:
+                    corners=None,
+                    goal_position=None,
+                    goal_yaw=None) -> List[matplotlib.axes.Axes]:
         """
         Generates graphical elements for a single frame of the trajectory animation.
 
@@ -73,22 +76,25 @@ class TrajViz():
         Returns:
             list: A list of matplotlib artists (elements) that represent the current frame's graphical content.
         """
-
-        # Swap red and blue channels for correct color display in Matplotlib
-        curr_image_red_blue_swapped = curr_image[:, :, ::-1]
-        
-        # Initialize frame list with image and text elements
         Frame = []
-        title = ax_image.text((curr_image.shape[1] - 100), 0, "", bbox={'facecolor': 'w', 'alpha': 0.7, 'pad': 5},
-                            fontsize=12, ha="left", va="top")
-        title.set_text(f"Frame: {frame_idx} | Time: {time:.4f} [sec]")
-        Frame.append(title)
-        Frame.append(ax_image.imshow(curr_image_red_blue_swapped))
-        
-        # Plot robot positions
+
+        # Only add image elements if both curr_image and ax_image are provided
+        if curr_image is not None and ax_image is not None:
+            # Swap red and blue channels for correct color display in Matplotlib
+            curr_image_red_blue_swapped = curr_image[:, :, ::-1]
+
+            # Initialize frame list with image and text elements
+            title = ax_image.text((curr_image.shape[1] - 100), 0, "", 
+                                  bbox={'facecolor': 'w', 'alpha': 0.7, 'pad': 5},
+                                  fontsize=12, ha="left", va="top")
+            title.set_text(f"Frame: {frame_idx} | Time: {time:.4f} [sec]")
+            Frame.append(title)
+            Frame.append(ax_image.imshow(curr_image_red_blue_swapped))
+
+        # Plot robot positions on the trajectory plot
         handles = []
         robot_pos_plot = ax_trajectory.plot(robot_position[:, 1], robot_position[:, 0],
-                                            color="red", linewidth=4, markersize=8,
+                                            color="magenta", linewidth=4, markersize=8,
                                             label='Robot position [m]')[0]
         handles.append(robot_pos_plot)
         Frame.append(robot_pos_plot)
@@ -96,8 +102,8 @@ class TrajViz():
         # Plot target positions if available
         if target_position is not None and len(target_position) > 0:
             target_pos_plot = ax_trajectory.plot(target_position[:, 1], target_position[:, 0],
-                                                color="blue", linewidth=4, markersize=16,
-                                                label='Target Object Position [m]')[0]
+                                                 color="blue", linewidth=4, markersize=16,
+                                                 label='Target Object Position [m]')[0]
             handles.append(target_pos_plot)
             Frame.append(target_pos_plot)
 
@@ -105,11 +111,19 @@ class TrajViz():
             if corners is not None:
                 x, y = corners[:, 1], corners[:, 0]
                 target_box_plot = ax_trajectory.plot([x[0], x[1], x[2], x[3], x[0]],
-                                                    [y[0], y[1], y[2], y[3], y[0]],
-                                                    color='blue', linestyle='-', marker='o', linewidth=4, markersize=16)[0]
+                                                     [y[0], y[1], y[2], y[3], y[0]],
+                                                     color='blue', linestyle='-', marker='o', linewidth=4, markersize=16)[0]
                 handles.append(target_box_plot)
                 Frame.append(target_box_plot)
-        
+
+        # Plot goal position if provided
+        if goal_position is not None and goal_yaw is not None:
+            goal_pos_plot = ax_trajectory.scatter(goal_position[1], goal_position[0],
+                                                color="red", linewidth=4,
+                                                label='Subgoal')
+            handles.append(goal_pos_plot)
+            Frame.append(goal_pos_plot)
+            
         # Add legend to trajectory plot
         ax_trajectory.legend(handles=handles)
 
@@ -264,13 +278,7 @@ def odom_to_numpy(msg:Odometry)->np.ndarray:
     """
     
     # Extract position and orientation from Odometry message
-    pos = [msg.pose.pose.position.x,
-        msg.pose.pose.position.y,
-        msg.pose.pose.position.z]
-    ori = [msg.pose.pose.orientation.x,
-        msg.pose.pose.orientation.y,
-        msg.pose.pose.orientation.z,
-        msg.pose.pose.orientation.w]
+    pos, ori = pose_to_numpy(msg.pose)
 
     # Extract linear and angular velocity
     lin_vel = [msg.twist.twist.linear.x,
@@ -283,6 +291,29 @@ def odom_to_numpy(msg:Odometry)->np.ndarray:
     # Convert the extracted values to numpy arrays and return them
     return [np.array(pos), np.array(ori), np.array(lin_vel), np.array(angular_vel)]
 
+
+def pose_to_numpy(msg: PoseStamped)->np.ndarray:
+    """
+    Converts a PoseStamped message to numpy arrays representing position and orientation.
+
+    Args:
+        msg (PoseStamped): An instance of PoseStamped.
+
+    Returns:
+        A list of numpy arrays: [position, orientation], where each array represents a different aspect of the PoseStamped message.
+    """
+    
+    # Extract position and orientation from PoseStamped message
+    pos = [msg.pose.position.x,
+            msg.pose.position.y,
+            msg.pose.position.z]
+    ori = [msg.pose.orientation.x,
+            msg.pose.orientation.y,
+            msg.pose.orientation.z,
+            msg.pose.orientation.w]
+
+    # Convert the extracted values to numpy arrays and return them
+    return [np.array(pos), np.array(ori)]
 
 def np_odom_to_xy_yaw(np_odom:np.ndarray, prev_data, Ao)->dict:
     """
@@ -298,9 +329,9 @@ def np_odom_to_xy_yaw(np_odom:np.ndarray, prev_data, Ao)->dict:
     x_gt, y_gt = np_odom[0][0], np_odom[0][1]
     yaw_gt = quat_to_yaw(np_odom[1])
     
-    
-    vt =  np_odom[2][0]
-    wt = np_odom[3][2] if np_odom[3][2] != 0 else 10**-7
+    #not in use
+    # vt =  np_odom[2][0]
+    # wt = np_odom[3][2] if np_odom[3][2] != 0 else 10**-7
     
     if(prev_data is not None):
         pos_in_odom = Ao @ np.array([x_gt, y_gt, 1]).T
@@ -334,6 +365,18 @@ def np_odom_to_xy_yaw(np_odom:np.ndarray, prev_data, Ao)->dict:
             'odom_frame':{'position':[x_in_odom,y_in_odom], 'yaw': yaw_in_odom, 'dpos':[dx_in_odom, dy_in_odom],'dyaw': dyaw},
             'relative_frame':{'position':[x_rel,y_rel], 'yaw': yaw_rel}}
 
+def np_pose_in_odom(np_pose:np.ndarray,Ao)->dict:
+    ## TODO: Refactore, add relative goal pose to the current pose of the robot
+    x_gt, y_gt = np_pose[0][0], np_pose[0][1]
+    yaw_gt = quat_to_yaw(np_pose[1])
+    
+    pos_in_odom = Ao @ np.array([x_gt, y_gt, 1]).T
+    x_in_odom, y_in_odom = pos_in_odom[0], pos_in_odom[1]
+
+    
+    return {'gt_frame':{'position':[x_gt, y_gt], 'yaw': yaw_gt},
+            'odom_frame':{'position':[x_in_odom,y_in_odom], 'yaw': 0.}}
+            
 def get_transform_to_start(x_start, y_start, yaw_start)->np.ndarray:
     """
     Computes the inverse transformation matrix from the start position and orientation.

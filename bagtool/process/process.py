@@ -62,7 +62,7 @@ class BadReader:
         save_aligned: Saves aligned data to files.
         save_traj_video: Generates and saves a trajectory video.
     """
-    def __init__(self, bagfile, dst_dataset = None, dst_datafolder_name=None, config = None) -> None:
+    def __init__(self, bagfile, dst_dataset = None, dst_datafolder_name=None, config = None, mode = "data") -> None:
         """
         Initializes a BagReader object to process ROS bag files.
 
@@ -83,7 +83,7 @@ class BadReader:
         print(f"\n[INFO]  Reading {bagfile}.")
 
         self.bagfile = bagfile
-        
+        self.mode = mode
         parts = bagfile.split('/')
         # If the bag_file contains '/', parts will have more than one element
         if len(parts) > 1:
@@ -196,6 +196,10 @@ class BadReader:
         self.metadata['time'] = self.aligned_data['time_elapsed'][-1]
         self.metadata['stats'] = statistics
 
+        if self.mode == "eval":
+            results = self._results(data=self.aligned_data)
+            self.metadata["results"] = results
+        
         print(f"[INFO]  Saving metadata.")
         with open(metadata_file_p, 'w') as file:
             json.dump(self.metadata, file, indent=4)
@@ -240,6 +244,14 @@ class BadReader:
         
         return statistics
 
+    def _results(self,data):
+        
+        res = {}
+        success = bool(sum(data["topics"]["goal_reach"]) > 0)
+        
+        res["success"] = success
+        
+        return res
 
     def _init_raw_data(self):
         """
@@ -373,7 +385,9 @@ class BadReader:
             "depth": image_to_numpy,
             "rgb": image_to_numpy,
             "odom": odom_to_numpy,
-            "target_object": object_detection_to_dic
+            "target_object": object_detection_to_dic,
+            "goal_reach": lambda x: x.data,
+            "goal_pose": pose_to_numpy, 
         }
 
         if topic == "depth":
@@ -398,11 +412,14 @@ class BadReader:
             "depth": lambda x: x,
             "rgb": lambda x: x,
             "odom": np_odom_to_xy_yaw,
-            "target_object": lambda x:x
+            "target_object": lambda x:x,
+            "goal_reach": lambda x:x,
+            "goal_pose": np_pose_in_odom
         }
 
         case_function = switcher.get(topic)
         
+        ## TODO: refactore!!!
         if(topic == "odom"):
             prev_data = self.aligned_data['topics'][topic][-1] if len(self.aligned_data['topics'][topic])>0 else None
             
@@ -411,6 +428,8 @@ class BadReader:
                 self.A = get_transform_to_start(x_start, y_start, yaw_start)
 
             return case_function(data, prev_data, self.A)
+        elif(topic == "goal_pose"):
+            return case_function(data, self.A)
         else:
             return case_function(data)
 
@@ -456,11 +475,11 @@ class BadReader:
                     h5file.create_dataset('time', data=v['time'])
                     
                     # Store the data depend on the topic
-                    if tk == 'odom':
+                    if tk in ["odom", "goal_pose"]:
                         
                         data_arrays = {}
                         num_keys = len(v['data'][0])  # Assuming all data entries have the same number of elements
-                        
+
                         # Initialize arrays for each key with the correct length
                         # indexes correspond to : ["position","orientation","linear_vel","angular_vel"]
                         for i in range(num_keys):
@@ -475,7 +494,7 @@ class BadReader:
                         for i in range(num_keys):
                             h5file.create_dataset(f'data_{i}', data=np.array(data_arrays[i]))
 
-                    elif tk in ['rgb', 'depth']: ## change to depth
+                    elif tk in ['rgb', 'depth']: 
                         h5file.create_dataset('data', data=np.array(v['data']))
 
                     elif tk == "target_object":
@@ -526,8 +545,25 @@ class BadReader:
                 # Write odometry data to a JSON file
                 with open(file_path, 'w') as file:
                     json.dump(dic_to_save, file, indent=4)
+            
+            elif tk == 'goal_pose':
+                # Filename and path for odometry data
+                filename = 'goal_pose_data'
+                file_path = os.path.join(self.dst_datafolder, filename + '.json')
+                
+                # Initialize dictionary to store odometry data
+                dic_to_save = {}
+                for frame in ['gt_frame', 'odom_frame']:
+                    dic_to_save.update({frame: {'position': [], 'yaw': []}})
+                    for type in ['position', 'yaw']:
+                        for i in range(len(data['topics'][tk])):
+                            dic_to_save[frame][type].append(data['topics']['goal_pose'][i][frame][type])
 
-            if tk == 'target_object':
+                # Write odometry data to a JSON file
+                with open(file_path, 'w') as file:
+                    json.dump(dic_to_save, file, indent=4)
+
+            elif tk == 'target_object':
                 # Filename and path for target object data
                 filename = 'traj_target_data'
                 file_path = os.path.join(self.dst_datafolder, filename + '.json')
@@ -600,9 +636,8 @@ class BadReader:
                 depth_rgb_images[:, :, :, 2] = depth_images  # Blue channel
                 images = np.concatenate((images, depth_rgb_images), axis=2) if images is not None else depth_rgb_images
 
-        if "target_object" not in keys:
-            target_positions = np.zeros_like(positions)
-        
+        target_positions = np.zeros_like(positions) if "target_object" not in keys else target_positions
+
         # Setup figure and axes for the trajectory and image plots
         fig = plt.figure(figsize=[16, 12])
         grid = plt.GridSpec(12, 17, hspace=0.2, wspace=0.2)
@@ -645,6 +680,93 @@ class BadReader:
         # Create and save the animation
         ani = animation.ArtistAnimation(fig=fig, artists=Frames, blit=True, interval=200)
         TrajViz.save_animation(ani=ani, dest_dir=self.dst_datafolder, file_name="traj_sample")
+
+    def save_eval_video(self, data: dict, rate=5):
+            """
+            Generates and saves a video visualizing trajectory data using aligned data sets.
+
+            This method constructs a video that illustrates the trajectory by plotting positional data over time,
+            overlaid on corresponding RGB and depth imagery, and saves it to a designated directory.
+
+            Args:
+                data (dict): The aligned data containing trajectories and associated imagery to be visualized.
+                rate (int): Frame sampling rate for the video; every 'rate'-th frame is used. Defaults to 10.
+            """
+
+            keys = data['topics'].keys()
+            times = np.array(data['time_elapsed'])
+            
+            
+            for key in keys:
+                if key == 'odom':
+                    # Extract odometry data for positions and orientations
+                    odom_traj = data['topics'][key]
+                    positions = np.array([item['odom_frame']['position'] for item in odom_traj])
+                    yaws = np.array([item['odom_frame']['yaw'] for item in odom_traj])
+
+                if key == 'goal_pose':
+                    # Extract odometry data for positions and orientations
+                    goal_pose = data['topics'][key]
+                    goal_positions = np.array([item['odom_frame']['position'] for item in goal_pose])
+                    goal_yaws = np.array([item['odom_frame']['yaw'] for item in goal_pose])
+                
+                if key == 'target_object':
+                    # Extract target object positions and bounding box dimensions
+                    target_in_cam = data['topics'][key]
+                    target_positions = np.array([item.get('position') for item in target_in_cam])
+                    target_bbox3d = np.array([item.get('bbox3d') for item in target_in_cam])
+                    target_bbox3d = target_bbox3d[:, :4, :2]  # Use the top view x-y coordinates of the bounding box
+
+            target_positions = np.zeros_like(positions) if "target_object" not in keys else target_positions
+            goal_positions = None if 'goal_pose' not in keys else goal_positions
+            goal_yaws = None if 'goal_pose' not in keys else goal_yaws
+
+            # Setup figure and axes for the trajectory and image plots
+            fig = plt.figure(figsize=[16, 12])
+            grid = plt.GridSpec(12, 17, hspace=0.2, wspace=0.2)
+            # ax_image = fig.add_subplot(grid[1:6, :], title="Scene Image")
+            ax_trajectory = fig.add_subplot(grid[:, :], title="Trajectory", xlabel="Y [m]", ylabel="X [m]")
+
+            # Set axis limits based on target and odometry data
+            x_lim = np.max([abs(np.max(target_positions[:, 1] + positions[:, 1])), abs(np.min(target_positions[:, 1] + positions[:, 1]))])
+            ax_trajectory.set_xlim(xmin=-x_lim - 0.5, xmax=x_lim + 0.5)
+            y_lim = np.max([abs(np.max(target_positions[:, 0] + positions[:, 0])), abs(np.min(target_positions[:, 0] + positions[:, 0]))])
+            ax_trajectory.set_ylim(ymin=-y_lim - 0.5, ymax=y_lim + 0.5)
+            
+            ax_trajectory.invert_xaxis()
+            ax_trajectory.grid(True)
+
+            aggregated_positions = []
+            aggregated_target_positions = []
+            Frames = []
+            for i in range(len(positions)):
+                if i % rate == 0:
+                    # Sample frames according to the specified rate for visualization
+                    aggregated_positions.append(positions[i])
+                    corners = None
+                    if ((target_positions[i] != np.zeros_like(target_positions[i])).all()):
+                        # Calculate transformed positions for visualization
+                        aggregated_target_positions.append(np.array([[np.cos(yaws[i]), -np.sin(yaws[i])], [np.sin(yaws[i]), np.cos(yaws[i])]]) @ target_positions[i][:2].T + positions[i])
+                        corners = (np.array([[np.cos(yaws[i]), -np.sin(yaws[i])], [np.sin(yaws[i]), np.cos(yaws[i])]]) @ target_bbox3d[i].T).T + positions[i]
+
+                    frame = TrajViz.visualization(robot_position=np.array(aggregated_positions),
+                                                yaw=yaws[i],
+                                                curr_image=None,
+                                                time=times[i],
+                                                frame_idx=i,
+                                                ax_image=None,
+                                                ax_trajectory=ax_trajectory,
+                                                target_position=np.array(aggregated_target_positions),
+                                                corners=corners,
+                                                goal_position=goal_positions[i],
+                                                goal_yaw=goal_yaws[i])
+                    Frames.append(frame)
+
+            # Create and save the animation
+            ani = animation.ArtistAnimation(fig=fig, artists=Frames, blit=True, interval=50)
+            TrajViz.save_animation(ani=ani, dest_dir=self.dst_datafolder, file_name="eval_sample")
+
+
 class BagProcess:
     """
     A class for processing ROS bag files in batches or entire folders.
@@ -667,7 +789,8 @@ class BagProcess:
                     save_raw: bool = False,
                     save_video: bool = True,
                     config: dict = None,
-                    force_process: bool = False):
+                    force_process: bool = False,
+                    mode: str = "data"):
         """
         Process a batch of ROS bag files located in a specified folder.
 
@@ -714,7 +837,8 @@ class BagProcess:
                     bag_reader = BadReader(bagfile=bagfile,
                                         dst_dataset=dst_dataset, 
                                         dst_datafolder_name=dst_datafolder_name,
-                                        config=config)
+                                        config=config,
+                                        mode = mode)
                     
                     # Get data
                     raw_data = bag_reader.get_raw_dataset()
@@ -723,10 +847,15 @@ class BagProcess:
                     # Save data
                     if save_raw:
                         bag_reader.save_raw(raw_data)
+                    
                     bag_reader.save_aligned(aligned_data)
                     save_video = save_video if config is None else config.get("save_vid", True)
-                    if save_video:
+                    
+                    if save_video and mode == "data":
                         bag_reader.save_traj_video(aligned_data)
+
+                    if mode == "eval":
+                        bag_reader.save_eval_video(aligned_data)
 
                     # add to metadata
                     metadata["processed_bags"].append(filename)
@@ -776,6 +905,7 @@ class BagProcess:
             dst_dataset = config.get('destination_folder')
             save_raw = config.get('save_raw', True)  # Default to False if not in config
             force_process = config.get('force',False)
+            mode = config.get('mode','data')
             
         print(f"[INFO] Processing folder - {folder_path}")
         
@@ -806,7 +936,8 @@ class BagProcess:
                                         dst_datafolder_name = dst_datafolder_name,
                                         save_raw=save_raw,
                                         config=config.get(demonstrator),
-                                        force_process=force_process) ## why I did it like this ????????
+                                        force_process=force_process,
+                                        mode=mode)
                 print("[INFO] ---------- Finish Batch Processing ----------\n")
 
                 batch_i = batch_i + 1

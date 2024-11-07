@@ -10,14 +10,16 @@ def process(args):
                         dst_dataset=args.dst,
                         dst_datafolder_name=args.name,
                         save_raw=args.no_raw,
-                        force_process=args.force)
+                        force_process=args.force,
+                        mode = args.mode)
         
     elif args.folder is not None:
         bp.process_folder(folder_path=args.folder,
                         dst_dataset=args.dst,
                         dst_datafolder_name=args.name,
                         save_raw=args.no_raw,
-                        force_process=args.force)
+                        force_process=args.force,
+                        mode = args.mode)
 
 def compress(args):
 
@@ -76,6 +78,8 @@ def main():
     parser_process.add_argument('-d', '--dst',default=None,
                             help='path to a dataset destination folder')
     parser_process.add_argument('-n', '--name',default=None,
+                            help='a custom name for the datafolder')
+    parser_process.add_argument('-m', '--mode',default="data",
                             help='a custom name for the datafolder')
     parser_process.add_argument('--no_raw',action="store_false",
                             help='not saving raw data')
