@@ -6,16 +6,18 @@ from .process.process import BagProcess as bp
 def process(args):
 
     if args.batch is not None:
-        bp.process_batch(args.batch,
-                        args.dst,
-                        args.name,
-                        args.no_raw)
+        bp.process_batch(bag_folder_path=args.batch,
+                        dst_dataset=args.dst,
+                        dst_datafolder_name=args.name,
+                        save_raw=args.no_raw,
+                        force_process=args.force)
         
     elif args.folder is not None:
-        bp.process_folder(args.folder,
-                        args.dst,
-                        args.name,
-                        args.no_raw)
+        bp.process_folder(folder_path=args.folder,
+                        dst_dataset=args.dst,
+                        dst_datafolder_name=args.name,
+                        save_raw=args.no_raw,
+                        force_process=args.force)
 
 def compress(args):
 
@@ -24,6 +26,14 @@ def compress(args):
 
     elif args.folder is not None:
         bc.compress_folder(args.folder)
+        
+
+def reset(args):
+    if args.batch is not None:
+        bp.reset_batch(args.batch)
+
+    elif args.folder is not None:
+        bp.reset_folder(args.folder)
 
 def is_bag_file(arg_bag_str: str) -> str:
     """"""
@@ -69,7 +79,19 @@ def main():
                             help='a custom name for the datafolder')
     parser_process.add_argument('--no_raw',action="store_false",
                             help='not saving raw data')
+    parser_process.add_argument('--force',action="store_true",
+                            help='not saving raw data')
     parser_process.set_defaults(func=process)
+
+
+    # Create the parser for the "process" command
+    parser_reset = subparsers.add_parser('reset',
+                                        help='reset help')
+    parser_reset.add_argument('-b', '--batch', type=is_bag_dir,
+                            help='path to a bag batch folder')
+    parser_reset.add_argument('-f', '--folder', type=is_bag_dir,
+                            help='path to a bag folder consisting bag batches')
+    parser_reset.set_defaults(func=reset)
 
     # Parse the args and call the default function
     args = parser.parse_args()

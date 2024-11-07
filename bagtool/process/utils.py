@@ -16,6 +16,7 @@
 import os
 from dataclasses import dataclass, field
 from typing import Any, List
+import json
 
 # Third party library imports
 import numpy as np
@@ -515,3 +516,17 @@ def image_compressed_to_numpy(msg:CompressedImage)->np.ndarray:
     np_img = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
 
     return np_img
+
+def reset_processed_bags(file_path):
+    # Load the JSON file
+    with open(file_path, 'r') as file:
+        data = json.load(file)
+    
+    # Reset 'processed_bags' to an empty list
+    data['processed_bags'] = []
+    
+    # Save the modified data back to the file
+    with open(file_path, 'w') as file:
+        json.dump(data, file, indent=4)
+
+    print(f"Processed bags reset in {file_path}")

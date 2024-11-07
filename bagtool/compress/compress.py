@@ -84,3 +84,6 @@ class BagCompress:
             if filename.startswith("bag_batch"):
                 batch_path = os.path.join(folder_path, filename)
                 BagCompress.compress_batch(batch_path)
+
+
+    
