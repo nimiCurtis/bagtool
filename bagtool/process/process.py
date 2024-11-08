@@ -157,12 +157,9 @@ class BadReader:
         title=['Topic', 'Type', 'Message Count', 'Frequency']
         topics_zipped = list(zip(self.topics,message_types, n_messages, frequency))
 
-        # Set the sync rate and max_depth
-        self.sync_rate = config.get("sync_rate") if config is not None else self._get_sync_rate() 
-        self.max_depth = config.get("max_depth") if config is not None else 10000 # 10 [meter]
         
-        self.metadata['sync_rate'] = self.sync_rate
-        self.metadata['max_depth'] = self.max_depth
+        
+
 
         # Initialize the 'topics' dictionary in metadata
         self.metadata['topics'] = {}
@@ -180,6 +177,12 @@ class BadReader:
         self.aligned_data = self._init_aligned_data(aligned_topics = config.get("aligned_topics") if config is not None \
                                                     else None)
 
+        # Set the sync rate and max_depth
+        self.sync_rate = config.get("sync_rate", self._get_sync_rate()) if config is not None else self._get_sync_rate()
+        self.max_depth = config.get("max_depth", 10000) if config is not None else 10000 # 10 [meter]
+        self.metadata['sync_rate'] = self.sync_rate
+        self.metadata['max_depth'] = self.max_depth
+        
         # Init the homogenouse matrix from the world to start pose
         self.A = None
 
