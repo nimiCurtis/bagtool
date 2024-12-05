@@ -684,7 +684,7 @@ class BadReader:
         ani = animation.ArtistAnimation(fig=fig, artists=Frames, blit=True, interval=200)
         TrajViz.save_animation(ani=ani, dest_dir=self.dst_datafolder, file_name="traj_sample")
 
-    def save_eval_video(self, data: dict, rate=5):
+    def save_eval_video(self, data: dict, rate=1):
             """
             Generates and saves a video visualizing trajectory data using aligned data sets.
 
@@ -766,7 +766,7 @@ class BadReader:
                     Frames.append(frame)
 
             # Create and save the animation
-            ani = animation.ArtistAnimation(fig=fig, artists=Frames, blit=True, interval=50)
+            ani = animation.ArtistAnimation(fig=fig, artists=Frames, blit=True, interval=10)
             TrajViz.save_animation(ani=ani, dest_dir=self.dst_datafolder, file_name="eval_sample")
 
 
